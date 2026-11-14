@@ -4,11 +4,16 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
 import '../role_assignment_styles.dart';
 
-/// 📖 Thẻ tóm tắt truyện cần gán vai
+/// The tom tat truyen can gan vai
 class RoleStorySummary extends StatelessWidget {
   final Story story;
+  final int? rolesCount;
 
-  const RoleStorySummary({super.key, required this.story});
+  const RoleStorySummary({
+    super.key,
+    required this.story,
+    this.rolesCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +85,9 @@ class RoleStorySummary extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9999),
                   ),
                   child: Text(
-                    'Cần: 1 Bạn Chính + 1 Bạn Đi Cùng',
+                    rolesCount != null && rolesCount! > 0
+                        ? 'Cần: $rolesCount vai diễn (tự dùng mẫu CM nếu thiếu)'
+                        : 'Cần: 1 Bạn Chính + 1 Bạn Đi Cùng',
                     style: AppTypography.labelSm(color: AppColors.secondary),
                   ),
                 ),
@@ -92,4 +99,3 @@ class RoleStorySummary extends StatelessWidget {
     );
   }
 }
-

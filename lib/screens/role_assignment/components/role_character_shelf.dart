@@ -3,25 +3,33 @@ import '../../../models/models.dart';
 import '../../../state/app_state.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
+import '../role_assignment_controller.dart';
 import '../role_assignment_styles.dart';
 
 /// Tu nhan vat cua be de chon gan vai (chi hien thi nhan vat da duoc Ba Me duyet)
 class RoleCharacterShelf extends StatelessWidget {
   final AppState state;
   final bool isTablet;
+  final RoleAssignmentController? controller;
   final void Function(KidCharacter character) onSelectCharacter;
 
   const RoleCharacterShelf({
     super.key,
     required this.state,
     required this.isTablet,
+    this.controller,
     required this.onSelectCharacter,
   });
 
   Widget _buildCharacterItem(KidCharacter character) {
+    final assignedRole = controller?.getAssignedRoleForCharacter(state, character.id);
     final isHero = state.heroCharacter?.id == character.id;
     final isCompanion = state.companionCharacter?.id == character.id;
-    final isAssigned = isHero || isCompanion;
+    final isAssigned = assignedRole != null || isHero || isCompanion;
+
+    final roleLabel = assignedRole != null
+        ? 'Đang là ${assignedRole.roleName}'
+        : (isHero ? 'Đang là Bạn Chính' : 'Đang là Bạn Đi Cùng');
 
     return GestureDetector(
       onTap: () => onSelectCharacter(character),
@@ -63,11 +71,13 @@ class RoleCharacterShelf extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        character.name,
-                        style: AppTypography.headlineSm(color: AppColors.onSurface),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Flexible(
+                        child: Text(
+                          character.name,
+                          style: AppTypography.headlineSm(color: AppColors.onSurface),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       if (character.isParentApproved) ...[
                         const SizedBox(width: 4),
@@ -94,8 +104,10 @@ class RoleCharacterShelf extends StatelessWidget {
                         borderRadius: BorderRadius.circular(9999),
                       ),
                       child: Text(
-                        isHero ? 'Đang là Bạn Chính' : 'Đang là Bạn Đi Cùng',
+                        roleLabel,
                         style: AppTypography.labelSm(color: AppColors.primary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -155,4 +167,3 @@ class RoleCharacterShelf extends StatelessWidget {
     );
   }
 }
-

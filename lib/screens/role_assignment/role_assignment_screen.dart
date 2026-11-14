@@ -3,6 +3,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/responsive.dart';
+import '../../widgets/app_loading.dart';
 import 'components/role_character_shelf.dart';
 import 'components/role_slot_card.dart';
 import 'components/role_step_instruction.dart';
@@ -12,11 +13,9 @@ import 'role_assignment_controller.dart';
 export 'role_assignment_controller.dart';
 export 'role_assignment_styles.dart';
 
-/// 🎭 Màn hình Phân Vai Nhân Vật Vào Truyện (RoleAssignmentScreen)
-/// Đã tái cấu trúc theo mô hình Component hóa siêu tinh gọn:
-/// - Controller: [RoleAssignmentController]
-/// - Stylesheet: [RoleAssignmentStyles]
-/// - Components: [RoleStorySummary], [RoleStepInstruction], [RoleSlotCard], [RoleCharacterShelf]
+/// Màn hình Phân Vai Nhân Vật Vào Truyện (RoleAssignmentScreen)
+/// Lấy toàn bộ vai diễn do Content Manager (CM) thiết lập.
+/// Bé có thể chọn bạn nhỏ để gán vào từng vai, nếu không đủ bạn nhỏ thì hệ thống tự động lấy mặc định của CM.
 class RoleAssignmentScreen extends StatefulWidget {
   final AppState appState;
 
@@ -40,6 +39,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
     _controller.loadStoryRoles(
       storyId: widget.appState.currentStory.id,
       token: widget.appState.authToken,
+      storyTitle: widget.appState.currentStory.title,
     );
   }
 
@@ -106,33 +106,37 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: RoleStorySummary(story: story)),
+                    Expanded(
+                      flex: 3,
+                      child: RoleStorySummary(
+                        story: story,
+                        rolesCount: _controller.storyRoles.length,
+                      ),
+                    ),
                     const SizedBox(width: 16),
                     const Expanded(flex: 2, child: RoleStepInstruction()),
                   ],
                 )
               else ...[
-                RoleStorySummary(story: story),
+                RoleStorySummary(
+                  story: story,
+                  rolesCount: _controller.storyRoles.length,
+                ),
                 const SizedBox(height: 14),
                 const RoleStepInstruction(),
               ],
               const SizedBox(height: 18),
 
-              // 2. Hai vị trí vai diễn
-              if (isTablet)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _buildHeroSlotCard(state)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildCompanionSlotCard(state)),
-                  ],
+              // 2. Danh sách toàn bộ các vai diễn do CM thiết lập
+              if (_controller.isLoadingRoles)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 28),
+                    child: AppLoadingLogo(size: 48),
+                  ),
                 )
-              else ...[
-                _buildHeroSlotCard(state),
-                const SizedBox(height: 14),
-                _buildCompanionSlotCard(state),
-              ],
+              else
+                _buildRoleSlotsList(state, isTablet),
               const SizedBox(height: 22),
 
               // 3. Tiêu đề tủ đồ nhân vật
@@ -163,10 +167,11 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 4. Danh sách nhân vật
+              // 4. Danh sách nhân vật bé vẽ
               RoleCharacterShelf(
                 state: state,
                 isTablet: isTablet,
+                controller: _controller,
                 onSelectCharacter: (char) => _controller.assignCharacterToTargetSlot(
                   context: context,
                   state: state,
@@ -206,29 +211,100 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
     );
   }
 
-  Widget _buildHeroSlotCard(AppState state) {
-    return RoleSlotCard(
-      title: 'VAI 1: BẠN CHÍNH',
-      description: 'Nhân vật dẫn dắt câu chuyện cổ tích',
-      assignedCharacter: state.heroCharacter,
-      roleTemplate: _controller.heroRole,
-      isTarget: _controller.targetSlot == 1,
-      onTap: () => _controller.setTargetSlot(1),
-      onClear: () => state.assignHeroCharacter(null),
-      onResetDefault: () => state.assignHeroCharacter(null),
+  Widget _buildRoleSlotsList(AppState state, bool isTablet) {
+    final roles = _controller.storyRoles;
+
+    if (roles.isEmpty) {
+      // Fallback khi chua co du lieu
+      return isTablet
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildSlotCardForIndex(state, 0, null)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildSlotCardForIndex(state, 1, null)),
+              ],
+            )
+          : Column(
+              children: [
+                _buildSlotCardForIndex(state, 0, null),
+                const SizedBox(height: 14),
+                _buildSlotCardForIndex(state, 1, null),
+              ],
+            );
+    }
+
+    if (isTablet && roles.length > 1) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final itemWidth = (constraints.maxWidth - 16) / 2;
+          return Wrap(
+            spacing: 16,
+            runSpacing: 14,
+            children: [
+              for (var i = 0; i < roles.length; i++)
+                SizedBox(
+                  width: itemWidth > 320 ? itemWidth : constraints.maxWidth,
+                  child: _buildSlotCardForIndex(state, i, roles[i]),
+                ),
+            ],
+          );
+        },
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < roles.length; i++) ...[
+          if (i > 0) const SizedBox(height: 14),
+          _buildSlotCardForIndex(state, i, roles[i]),
+        ],
+      ],
     );
   }
 
-  Widget _buildCompanionSlotCard(AppState state) {
+  Widget _buildSlotCardForIndex(AppState state, int index, StoryRoleTemplate? role) {
+    final effectiveRole = role ??
+        (index < _controller.storyRoles.length ? _controller.storyRoles[index] : null);
+
+    final assignedChar = effectiveRole != null
+        ? _controller.getAssignedCharacterForRole(state, effectiveRole, index)
+        : (index == 0 ? state.heroCharacter : state.companionCharacter);
+
+    final roleName = effectiveRole?.roleName ??
+        (index == 0 ? 'Bạn Chính' : (index == 1 ? 'Bạn Đi Cùng' : 'Vai Diễn ${index + 1}'));
+
+    final title = 'VAI ${index + 1}: ${roleName.toUpperCase()}';
+
+    final desc = effectiveRole?.description.isNotEmpty == true
+        ? effectiveRole!.description
+        : (index == 0
+            ? 'Nhân vật dẫn dắt câu chuyện cổ tích'
+            : 'Người bạn trung thành sẻ chia mọi khó khăn');
+
     return RoleSlotCard(
-      title: 'VAI 2: BẠN ĐI CÙNG',
-      description: 'Người bạn trung thành sẻ chia mọi khó khăn',
-      assignedCharacter: state.companionCharacter,
-      roleTemplate: _controller.companionRole,
-      isTarget: _controller.targetSlot == 2,
-      onTap: () => _controller.setTargetSlot(2),
-      onClear: () => state.assignCompanionCharacter(null),
-      onResetDefault: () => state.assignCompanionCharacter(null),
+      title: title,
+      description: desc,
+      assignedCharacter: assignedChar,
+      roleTemplate: effectiveRole,
+      isTarget: _controller.targetSlotIndex == index,
+      onTap: () => _controller.setTargetSlot(index),
+      onClear: () {
+        if (effectiveRole != null) {
+          _controller.resetRoleToDefault(state: state, role: effectiveRole, index: index);
+        } else {
+          if (index == 0) state.assignHeroCharacter(null);
+          if (index == 1) state.assignCompanionCharacter(null);
+        }
+      },
+      onResetDefault: () {
+        if (effectiveRole != null) {
+          _controller.resetRoleToDefault(state: state, role: effectiveRole, index: index);
+        } else {
+          if (index == 0) state.assignHeroCharacter(null);
+          if (index == 1) state.assignCompanionCharacter(null);
+        }
+      },
     );
   }
 }

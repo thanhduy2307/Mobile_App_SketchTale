@@ -4,7 +4,10 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
 import '../role_assignment_styles.dart';
 
-/// 🎭 Thẻ vị trí vai diễn (Nhân vật chính hoặc Bạn đồng hành)
+/// The vi tri vai dien trong truyen
+/// Hien thi thong tin vai dien tu Content Manager (CM).
+/// Neu be da gan ban nho: hien thi nhan vat be ve.
+/// Neu chua gan ban nho (khong du ban nho): tu dong lay mac dinh cua CM.
 class RoleSlotCard extends StatelessWidget {
   final String title;
   final String description;
@@ -26,6 +29,15 @@ class RoleSlotCard extends StatelessWidget {
     required this.onClear,
     required this.onResetDefault,
   });
+
+  Widget _buildDefaultPlaceholder() {
+    return Container(
+      width: 58,
+      height: 58,
+      color: AppColors.secondaryFixed,
+      child: const Icon(Icons.theater_comedy_rounded, color: AppColors.onSecondaryFixed),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,14 +88,14 @@ class RoleSlotCard extends StatelessWidget {
                     icon: const Icon(Icons.close_rounded, size: 18),
                     color: AppColors.outline,
                     onPressed: onClear,
-                    tooltip: 'Hủy chọn',
+                    tooltip: 'Quay lại mặc định',
                   ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
               roleTemplate?.roleName.isNotEmpty == true
-                  ? 'Gán cho: ${roleTemplate!.roleName}'
+                  ? 'Gán cho vai: ${roleTemplate!.roleName}'
                   : description,
               style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
             ),
@@ -121,12 +133,31 @@ class RoleSlotCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          assignedCharacter!.name,
-                          style: AppTypography.headlineSm(color: AppColors.onSurface),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                assignedCharacter!.name,
+                                style: AppTypography.headlineSm(color: AppColors.onSurface),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryFixed,
+                                borderRadius: BorderRadius.circular(9999),
+                              ),
+                              child: Text(
+                                'Bé vẽ',
+                                style: AppTypography.labelSm(color: AppColors.primary),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           assignedCharacter!.title,
                           style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
@@ -139,24 +170,87 @@ class RoleSlotCard extends StatelessWidget {
                 ],
               )
             else
+              // Trang thai chua gan: Tu dong lay mac dinh cua CM
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 20),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isTarget ? AppColors.primary.withValues(alpha: 0.5) : AppColors.outline,
-                    style: BorderStyle.solid,
+                    color: isTarget ? AppColors.primary : AppColors.outlineVariant,
+                    width: isTarget ? 1.8 : 1.0,
                   ),
                 ),
-                child: Center(
-                  child: Text(
-                    isTarget ? 'Chạm nhân vật bên dưới để gán' : 'Chạm để chọn vai này',
-                    style: AppTypography.labelMd(
-                      color: isTarget ? AppColors.primary : AppColors.outline,
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: (roleTemplate != null && roleTemplate!.fullDefaultAssetUrl.isNotEmpty)
+                          ? (roleTemplate!.fullDefaultAssetUrl.startsWith('assets/')
+                              ? Image.asset(
+                                  roleTemplate!.fullDefaultAssetUrl,
+                                  width: 58,
+                                  height: 58,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, _, _) => _buildDefaultPlaceholder(),
+                                )
+                              : Image.network(
+                                  roleTemplate!.fullDefaultAssetUrl,
+                                  width: 58,
+                                  height: 58,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: appImageLoadingBuilder,
+                                  errorBuilder: (_, _, _) => _buildDefaultPlaceholder(),
+                                ))
+                          : _buildDefaultPlaceholder(),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  roleTemplate?.roleName.isNotEmpty == true
+                                      ? roleTemplate!.roleName
+                                      : 'Nhân vật gốc',
+                                  style: AppTypography.headlineSm(color: AppColors.onSurface),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(9999),
+                                ),
+                                child: Text(
+                                  'Mặc định CM',
+                                  style: AppTypography.labelSm(color: AppColors.onSurfaceVariant),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            isTarget
+                                ? 'Chạm bạn nhỏ bên dưới nếu muốn thay đổi vai này'
+                                : 'Đang dùng nhân vật gốc của truyện (CM)',
+                            style: AppTypography.bodySm(
+                              color: isTarget ? AppColors.primary : AppColors.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -165,10 +259,11 @@ class RoleSlotCard extends StatelessWidget {
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(
+                child: TextButton.icon(
                   onPressed: onResetDefault,
-                  child: Text(
-                    'Dùng nhân vật mặc định',
+                  icon: const Icon(Icons.refresh_rounded, size: 14),
+                  label: Text(
+                    'Quay lại mặc định của CM',
                     style: AppTypography.labelSm(color: AppColors.secondary),
                   ),
                 ),
@@ -180,4 +275,3 @@ class RoleSlotCard extends StatelessWidget {
     );
   }
 }
-
