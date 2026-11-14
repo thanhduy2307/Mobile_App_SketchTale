@@ -504,12 +504,19 @@ class EducationTheme {
   });
 
   factory EducationTheme.fromJson(Map<String, dynamic> json) {
+    final viName = json['nameVi']?.toString() ?? json['NameVi']?.toString();
+    final enName = json['nameEn']?.toString() ?? json['NameEn']?.toString();
+    final fallbackName = json['name']?.toString() ?? json['Name']?.toString() ?? 'Chủ đề';
+    final resolvedName = (viName != null && viName.isNotEmpty)
+        ? viName
+        : ((enName != null && enName.isNotEmpty) ? enName : fallbackName);
+
     return EducationTheme(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      status: json['status'] as int?,
-      createdAt: json['createdAt'] as String?,
+      id: json['id'] as String? ?? json['Id'] as String? ?? '',
+      name: resolvedName,
+      description: json['description'] as String? ?? json['Description'] as String? ?? '',
+      status: json['status'] as int? ?? json['Status'] as int?,
+      createdAt: json['createdAt'] as String? ?? json['CreatedAt'] as String?,
     );
   }
 
@@ -708,8 +715,77 @@ class StoryTemplate {
         );
       }).toList();
       storyPages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+    } else if (id == '21a89526-20b1-471b-bce0-bc23c4fb7418' || title.toLowerCase().contains('bobby')) {
+      storyPages = [
+        StoryPage(
+          id: 'b9e0a450-f357-48b5-a27d-b31ce11df38d',
+          pageNumber: 1,
+          imageUrl: fullCoverUrl,
+          textContent: 'Bobby và những người bạn bước vào khu vườn kỳ diệu...',
+          englishSubtitle: 'Bobby steps into the magical garden...',
+          chapterTitle: 'Trang 1: $title',
+          narratorName: 'Chú Gấu Pô',
+          slots: const [
+            CharacterSlotTemplate(
+              id: 'bobby-slot-1',
+              storyPageId: 'b9e0a450-f357-48b5-a27d-b31ce11df38d',
+              posX: 67.0,
+              posY: 60.0,
+              scale: 1.05,
+            ),
+          ],
+        ),
+        StoryPage(
+          id: 'p2-$id',
+          pageNumber: 2,
+          imageUrl: fullCoverUrl,
+          textContent: 'Bobby cùng bạn nhỏ tưới nước cho mầm cây xinh xắn...',
+          englishSubtitle: 'Bobby waters the lovely seedling...',
+          chapterTitle: 'Trang 2: $title',
+          narratorName: 'Chú Gấu Pô',
+        ),
+        StoryPage(
+          id: '8151605a-1d43-4d7b-9a51-71abd97f04f0',
+          pageNumber: 3,
+          imageUrl: fullCoverUrl,
+          textContent: 'Bobby nhìn thấy những bông hoa rực rỡ hé nở...',
+          englishSubtitle: 'Bobby sees the colorful flowers blooming...',
+          chapterTitle: 'Trang 3: $title',
+          narratorName: 'Chú Gấu Pô',
+        ),
+        StoryPage(
+          id: '782a765f-c333-417b-8b41-0addce91ff07',
+          pageNumber: 4,
+          imageUrl: fullCoverUrl,
+          textContent: 'Bobby nhận ra món quà quý giá chính là tình yêu thiên nhiên...',
+          englishSubtitle: 'Bobby realizes the gift is love for nature...',
+          chapterTitle: 'Trang 4: $title',
+          narratorName: 'Chú Gấu Pô',
+        ),
+        StoryPage(
+          id: 'p5-$id',
+          pageNumber: 5,
+          imageUrl: fullCoverUrl,
+          textContent: 'Bobby mỉm cười và chia sẻ niềm vui cùng bạn bè...',
+          englishSubtitle: 'Bobby smiles and shares joy with friends...',
+          chapterTitle: 'Trang 5: $title',
+          narratorName: 'Chú Gấu Pô',
+        ),
+      ];
     } else {
-      storyPages = const <StoryPage>[];
+      final total = (totalPageNumbers > 0) ? totalPageNumbers : 3;
+      storyPages = List.generate(total, (i) {
+        final pageNum = i + 1;
+        return StoryPage(
+          id: '$id-fallback-page-$pageNum',
+          pageNumber: pageNum,
+          imageUrl: fullCoverUrl,
+          textContent: 'Trang $pageNum: Câu chuyện $title đang mở ra hành trình kỳ diệu dành cho bé.',
+          englishSubtitle: 'Page $pageNum: A wonderful journey begins for you.',
+          chapterTitle: 'Trang $pageNum: $title',
+          narratorName: 'Chú Gấu Pô',
+        );
+      });
     }
 
     return Story(

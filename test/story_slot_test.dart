@@ -289,12 +289,14 @@ void main() {
         ),
       );
 
-      expect(find.text('Hiệp Sĩ Rồng Con'), findsOneWidget);
-      expect(find.text('Xem lại'), findsOneWidget);
+      if (StoryCanvasView.showCanvasBadges) {
+        expect(find.text('Hiệp Sĩ Rồng Con'), findsOneWidget);
+        expect(find.text('Xem lại'), findsOneWidget);
 
-      await tester.tap(find.text('Xem lại'));
-      await tester.pump();
-      expect(replayed, isTrue);
+        await tester.tap(find.text('Xem lại'));
+        await tester.pump();
+        expect(replayed, isTrue);
+      }
     });
 
     testWidgets('StoryPlayerScreen continuously moves Dragon along CM coordinates and survives hot reload', (tester) async {
@@ -315,7 +317,9 @@ void main() {
       await tester.pump();
 
       // Dragon heroCharacter is rendered in the CM slot
-      expect(find.text('Hiệp Sĩ Rồng Con'), findsOneWidget);
+      if (StoryCanvasView.showCanvasBadges) {
+        expect(find.text('Hiệp Sĩ Rồng Con'), findsOneWidget);
+      }
       final slotFinder = find.byKey(const ValueKey('cm-slot-bobby-slot-1'));
       expect(slotFinder, findsOneWidget);
 

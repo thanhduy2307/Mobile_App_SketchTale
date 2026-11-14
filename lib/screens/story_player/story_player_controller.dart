@@ -140,7 +140,11 @@ class StoryPlayerController extends ChangeNotifier {
     storyQuizzes = List<QuizQuestion>.from(story.allQuizzes);
     tabQuizStartTime = DateTime.now();
 
-    isLoadingPages = true;
+    final needLoad = story.id.isNotEmpty &&
+        (pages.isEmpty ||
+            pages.length < story.totalPages ||
+            pages.any((p) => p.id == null || p.id!.startsWith('local-page-')));
+    isLoadingPages = needLoad;
 
     loadStoryRolesAndMappings();
     preloadAllStoryVocabularies();
@@ -364,15 +368,21 @@ class StoryPlayerController extends ChangeNotifier {
   }
 
   Future<void> ensureStoryPagesLoaded() async {
+    final needLoad = story.id.isNotEmpty &&
+        (pages.isEmpty ||
+            pages.length < story.totalPages ||
+            pages.any((p) => p.id == null || p.id!.startsWith('local-page-')));
+
+    if (!needLoad) {
+      isLoadingPages = false;
+      notifyListeners();
+      return;
+    }
+
     isLoadingPages = true;
     notifyListeners();
 
     try {
-      final needLoad = story.id.isNotEmpty &&
-          (pages.isEmpty ||
-              pages.length < story.totalPages ||
-              pages.any((p) => p.id == null || p.id!.startsWith('local-page-')));
-
       if (needLoad) {
         final backendPages = await StoryService.fetchStoryTemplatePages(
           story.id,

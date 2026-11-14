@@ -143,13 +143,30 @@ class AppConfig {
   static String storySlotUrl(String slotId) => '$baseUrl/api/story-slots/$slotId';
 
   // ==========================================
-  // STORY ROLE TEMPLATE SWAGGER ENDPOINTS (Child Role: Actived Roles Only)
+  // STORY ROLE TEMPLATE SWAGGER ENDPOINTS (Child Role & Content Manager)
   // ==========================================
-  /// 1. GET /api/story-template/{storyId}/roles (Lấy tất cả roles actived của story - Authorize Role Child)
-  static String storyRolesUrl(String storyId) => '$baseUrl/api/story-template/$storyId/roles';
+  /// 1. GET /api/story-template/{storyId}/all-roles (Lấy tất cả roles - Authorize Role CM)
+  static String storyAllRolesUrl(String storyId) =>
+      '$baseUrl/api/story-template/$storyId/all-roles';
 
-  /// 2. GET /api/role/{id} (Lấy role bằng Id - Authorize Role Child)
+  /// 2. GET /api/story-template/{storyId}/roles (Lấy tất cả roles actived của story - Authorize)
+  static String storyRolesUrl(String storyId) =>
+      '$baseUrl/api/story-template/$storyId/roles';
+
+  /// 3. GET /api/role/{id} (Lấy role bằng Id)
   static String storyRoleUrl(String id) => '$baseUrl/api/role/$id';
+
+  /// 4. POST /api/story-template/{storyId}/role (Tạo mới một role - Authorize Role CM)
+  static String storyCreateRoleUrl(String storyId) =>
+      '$baseUrl/api/story-template/$storyId/role';
+
+  /// 5. PUT /api/story-role/{id} (Update thông tin của role - Authorize Role CM)
+  static String storyUpdateRoleUrl(String id) =>
+      '$baseUrl/api/story-role/$id';
+
+  /// 6. DELETE /api/story-role/{id} (Chuyển trạng thái actived -> inactived / soft delete - Authorize Role CM)
+  static String storyDeleteRoleUrl(String id) =>
+      '$baseUrl/api/story-role/$id';
 
   // ==========================================
   // CHILD PROFILE SWAGGER ENDPOINTS (Child View-Only)

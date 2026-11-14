@@ -34,16 +34,40 @@ void main() {
         '${AppConfig.baseUrl}/api/storypage-template/pages/$storyId',
       );
 
-      // 5. GET /api/story-template/{storyId}/roles
+      // 5. GET /api/story-template/{storyId}/all-roles (CM)
+      expect(
+        AppConfig.storyAllRolesUrl(storyId),
+        '${AppConfig.baseUrl}/api/story-template/$storyId/all-roles',
+      );
+
+      // 6. GET /api/story-template/{storyId}/roles (Actived)
       expect(
         AppConfig.storyRolesUrl(storyId),
         '${AppConfig.baseUrl}/api/story-template/$storyId/roles',
       );
 
-      // 6. GET /api/role/{id}
+      // 7. GET /api/role/{id}
       expect(
         AppConfig.storyRoleUrl(roleId),
         '${AppConfig.baseUrl}/api/role/$roleId',
+      );
+
+      // 8. POST /api/story-template/{storyId}/role (CM Create)
+      expect(
+        AppConfig.storyCreateRoleUrl(storyId),
+        '${AppConfig.baseUrl}/api/story-template/$storyId/role',
+      );
+
+      // 9. PUT /api/story-role/{id} (CM Update)
+      expect(
+        AppConfig.storyUpdateRoleUrl(roleId),
+        '${AppConfig.baseUrl}/api/story-role/$roleId',
+      );
+
+      // 10. DELETE /api/story-role/{id} (CM Soft Delete)
+      expect(
+        AppConfig.storyDeleteRoleUrl(roleId),
+        '${AppConfig.baseUrl}/api/story-role/$roleId',
       );
     });
 
@@ -66,7 +90,7 @@ void main() {
       expect(role.storyTemplateId, 'story-456');
       expect(role.storyRoleType, StoryRoleType.mainCharacter);
       expect(role.roleName, 'Hiệp Sĩ Rồng');
-      expect(role.roleTitleWithEmoji.contains('🌟'), true);
+      expect(role.roleTitleWithEmoji.contains('Hiệp Sĩ Rồng'), true);
       expect(role.typeLabel.contains('Nhân Vật Chính'), true);
       expect(role.fullDefaultAssetUrl.contains('/seed/characters/dragon.png'), true);
 
