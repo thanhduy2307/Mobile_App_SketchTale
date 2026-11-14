@@ -46,3 +46,12 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Sub-projects
+FE/
+sketch-tale-backend-main/
+
+# Environment files
+.env
+.env.local
+.env.*.local

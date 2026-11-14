@@ -1,14 +1,98 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+
 import '../models/models.dart';
+import '../services/child_profile_service.dart';
+import '../services/story_service.dart';
+import '../services/auth_service.dart';
+import '../services/character_mapping_service.dart';
+import '../services/char_type_service.dart';
+import '../services/content_report_service.dart';
+import '../services/reading_log_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_config.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppState extends ChangeNotifier {
   // Kid Profile Data
-  String kidName = 'Bé Bo';
+  String kidName = 'Bé Bống';
   int stars = 120;
   int streakDays = 3;
   int screenTimeMinutesAllowed = 45;
   int screenTimeUsedToday = 20;
+  int remainingTimeMinutesAllowed = 45;
+  int dailyCharacterLimit = 5;
+  int remainingCharacterLimit = 5;
+  int parentCredits =
+      3690; // Parent balance for AI Vision (-30) & Character Gen (-150 / -50)
+  bool isLoggedIn = false;
+  String? authToken;
+  String? refreshToken;
+  String userRole = 'Child'; // "Child", "Parent", "Admin", "ContentManager"
+  String? childUsername;
+  UserProfile? userProfile;
+
+  /// ID (GUID) của tài khoản User đang đăng nhập (lấy từ UserProfile, giải mã JWT token, hoặc Active Profile)
+  String? get currentUserId =>
+      (userProfile?.id != null && AppConfig.isValidUuid(userProfile!.id))
+      ? userProfile!.id
+      : (AppConfig.extractUserIdFromJwt(authToken) ??
+            (AppConfig.isValidUuid(activeChildProfile?.id)
+                ? activeChildProfile?.id
+                : null));
+
+  // Active Child Profile from Swagger /api/child-profiles
+  ChildProfile? activeChildProfile;
+  List<ChildProfile> childProfiles = [];
+  bool isLoadingProfiles = false;
+  String? customAvatarPath;
+
+  /// Đường dẫn ảnh đại diện của bé đồng bộ theo cài đặt của Phụ Huynh / Bé
+  String get childAvatarAsset {
+    if (customAvatarPath != null && customAvatarPath!.isNotEmpty) {
+      return customAvatarPath!;
+    }
+    if (activeChildProfile != null) {
+      return activeChildProfile!.avatarAssetPath;
+    }
+    final lower = kidName.toLowerCase();
+    if (lower.contains('bống') || lower.contains('đổng') || lower.contains('bong') || lower.contains('dong')) {
+      return 'assets/images/child-avatars/child-01.png';
+    }
+    if (lower.contains('bo') || lower.contains('bơ') || lower.contains('bảo')) {
+      return 'assets/images/child-avatars/child-02.png';
+    }
+    if (lower.contains('mimi') || lower.contains('mi mi') || lower.contains('mây') || lower.contains('may')) {
+      return 'assets/images/child-avatars/child-03.png';
+    }
+    return 'assets/images/child-avatars/child-01.png';
+  }
+
+  void setCustomAvatar(String path) {
+    customAvatarPath = path;
+    notifyListeners();
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('sketchtale_child_avatar', path);
+    }).catchError((_) {});
+  }
+
+  /// ID hợp lệ của hồ sơ trẻ em (ChildProfileId) dùng cho các API
+  String? get effectiveChildProfileId {
+    if (activeChildProfile != null && AppConfig.isValidUuid(activeChildProfile!.id)) {
+      return activeChildProfile!.id;
+    }
+    for (final p in childProfiles) {
+      if (AppConfig.isValidUuid(p.id) && p.id != '00000000-0000-0000-0000-000000000000') {
+        return p.id;
+      }
+    }
+    return AppConfig.extractUserIdFromJwt(authToken);
+  }
+
+  // Character Types loaded from /api/char-types
+  List<CharType> charTypes = [];
+  bool isLoadingCharTypes = false;
 
   // Selected Story for Reading & Role assignment
   late Story currentStory;
@@ -16,6 +100,7 @@ class AppState extends ChangeNotifier {
   // Character Roles Assignment
   KidCharacter? heroCharacter;
   KidCharacter? companionCharacter;
+  final Map<String, UserStoryCharacterMapping> storyRoleMappings = {};
 
   // List of kid's characters
   List<KidCharacter> characters = [];
@@ -23,174 +108,730 @@ class AppState extends ChangeNotifier {
   // List of all interactive stories
   List<Story> stories = [];
 
+  // Story Templates & Education Themes loaded from API
+  List<StoryTemplate> storyTemplates = [];
+  List<EducationTheme> educationThemes = [];
+  bool isLoadingStories = false;
+  bool isLoadingStoryPages = false;
+  String? storyLoadError;
+
+  /// True whenever any global backend fetch is in flight
+  bool get isAnyLoading =>
+      isLoadingStories ||
+      isLoadingProfiles ||
+      isLoadingCharTypes ||
+      isLoadingStoryPages;
+
   // Filter for Library
-  String selectedCategory = 'Tất cả';
+  String selectedCategory = 'Tất Cả';
+
+  // ==========================================
+  // FALLBACK & OFFLINE RESILIENCE STATUS
+  // ==========================================
+  final Map<String, bool> _fallbackStatus = {
+    'Hồ Sơ Của Bé': false,
+    'Thư Viện Truyện': false,
+    'Chủng Loại Nhân Vật': false,
+  };
+
+  Map<String, bool> get fallbackStatus => Map.unmodifiable(_fallbackStatus);
+
+  /// Whether any active service is currently operating in fallback mode
+  bool get isFallbackMode =>
+      _fallbackStatus.values.any((isFallback) => isFallback);
+
+  /// List of features currently running in fallback mode
+  List<String> get activeFallbackFeatures =>
+      _fallbackStatus.entries.where((e) => e.value).map((e) => e.key).toList();
+
+  void setFallbackStatus(String feature, bool isFallback) {
+    if (_fallbackStatus[feature] != isFallback) {
+      _fallbackStatus[feature] = isFallback;
+      notifyListeners();
+    }
+  }
+
+  /// Refreshes all core backend data at once and updates fallback status
+  Future<void> syncAllData() async {
+    await Future.wait([
+      fetchChildProfiles(),
+      fetchStoryTemplates(),
+      fetchCharTypes(),
+      if (authToken != null && authToken!.isNotEmpty) fetchUserProfile(),
+    ]);
+  }
 
   // Drawing Canvas State
   List<List<DrawingPoint>> strokeLines = [];
-  Color currentBrushColor = AppColors.primaryContainer;
+  Color currentBrushColor = const Color(0xFFF59E0B);
   double currentBrushSize = 8.0;
   bool isEraserMode = false;
   bool isCameraScannerMode = false;
+  String selectedPersonality = 'Dũng Sĩ'; // 'Dũng Sĩ', 'Thú Cưng', 'Phù Thủy'
+
+  /// Whether the child has daily character creation attempts left
+  bool get canCreateCharacter =>
+      activeChildProfile?.canCreateCharacter ?? (remainingCharacterLimit > 0);
+
+  /// Whether parent has enough credit for Stage 1 vision analysis (30 credits)
+  bool get canAffordAnalyze => parentCredits >= 30;
+
+  /// Whether parent has enough credit for Stage 2 character generation (150 credits)
+  bool get canAffordGenerate => parentCredits >= 150;
+
+  /// Whether parent has enough credit for character regeneration (50 credits)
+  bool get canAffordRegenerate => parentCredits >= 50;
+
+  /// Whether parent has sufficient credits for full 2-stage creation (180 credits)
+  bool get canAffordFullCreation => parentCredits >= 180;
+
+  /// Whether the child has remaining screen time today
+  bool get hasRemainingScreenTime =>
+      activeChildProfile?.hasRemainingTime ?? (remainingTimeMinutesAllowed > 0);
+
+  static const emptyQuiz = QuizQuestion(
+    questionText: '',
+    visualClueUrl: '',
+    options: [],
+    optionEmojis: [],
+    correctIndex: 0,
+    celebrationTitle: '',
+    celebrationMessage: '',
+  );
+
+  static const emptyStory = Story(
+    id: '',
+    title: 'Chưa có câu chuyện',
+    subtitle: '',
+    coverUrl: '',
+    ageRange: '',
+    category: '',
+    totalPages: 0,
+    currentPage: 0,
+    isCompleted: false,
+    durationMinutes: 0,
+    rating: 0.0,
+    narrator: '',
+    characterName: '',
+    pages: [],
+    quiz: emptyQuiz,
+  );
 
   AppState() {
     _initializeInitialData();
+    restoreSession();
   }
 
   void _initializeInitialData() {
-    // Initial Pre-loaded Characters from Stitch AI mockups
-    characters = [
-      KidCharacter(
-        id: 'char_1',
-        name: 'Khủng Long Cam Bibo',
-        title: 'Dũng sĩ tí hon vui vẻ',
-        description: 'Bạn khủng long màu cam vui tính, luôn yêu thích việc thám hiểm và bảo vệ muôn loài.',
-        drawingUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBs1j3zRcevls4hct7nBLNl-MkQnsK7toexPnjvrTD6o6grUe5LRVFr48TmDhOkJRfp5Y4vH9CBxVELjUEZjdk4_PwjzWXqSy_jPmk5x8lm-6H8YcUa_VmryBJa7ZbuS-RvYRs3HFFNUR0ER83b8VqqyfVywEVMGXGWhsd64VL4q00kJkrvW8cj30w-LJRCoY6LJxTsWfvShrWvjBoiwMYTe8nRFsuOj1pcrEeyCZPjTibGAPFHUwpG',
-        avatar3dUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB9oZOVJC6DPIwJTkxGEEUWEu_mwzFvpXcDAd0AMoIg2bEe6d38DGSi_LAkDXRSiQa9IHuMk81jz4YgPMZwmgDGA78k8oqZ0ak3oxwvFl5ET3TglIxmkPgMUA-OsRmKcKu0WUba-cz2l-jkWxXJPKm49h80eW6LuULTqTUzLPFilNcfiD0GZJ9pc0DOYX2caBfUhBhky_qljX1zdzP7fB6t6YzVfdfdVj6bTTW7PlhD4Tb_ZknjEbLK',
-        isParentApproved: true,
-        voicePhrase: 'Chào cậu chủ nhỏ! Tớ đã sẵn sàng cùng cậu thám hiểm Rừng Phép Thuật rồi nè, Roar! 🦖',
-        themeColor: AppColors.secondaryContainer,
-        assignedRole: 'Dũng Sĩ Rừng Xanh 🦁',
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      KidCharacter(
-        id: 'char_2',
-        name: 'Gấu Bông Siêu Nhân',
-        title: 'Người hùng ấm áp',
-        description: 'Chú gấu bông với chiếc áo choàng đỏ rực rỡ, luôn ôm chặt và sưởi ấm mọi người.',
-        drawingUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB8Yw2nDsZD2i7T8eDXnOZ0Jpayw3A4CTRzVoAiufYwRxqIYNJP9_gXYH4NRDHuu5tULxxmZNjY-x-S1qz3Y-BDeRExrn5ojsvHb_WHfaV89b51FbfSTbFhEF5ZaEPPccyVCZOHm3UvcMkmrKpiS_A3ZVfS-a1KPikgFpkec5SeMjMfTTsRLP9p75vzBF8-cO28yiRJOZuhlOvxYR0Gu18vANXXpejgrEXHWZHxhyyPlCWUOPFebNQa',
-        avatar3dUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB8Yw2nDsZD2i7T8eDXnOZ0Jpayw3A4CTRzVoAiufYwRxqIYNJP9_gXYH4NRDHuu5tULxxmZNjY-x-S1qz3Y-BDeRExrn5ojsvHb_WHfaV89b51FbfSTbFhEF5ZaEPPccyVCZOHm3UvcMkmrKpiS_A3ZVfS-a1KPikgFpkec5SeMjMfTTsRLP9p75vzBF8-cO28yiRJOZuhlOvxYR0Gu18vANXXpejgrEXHWZHxhyyPlCWUOPFebNQa',
-        isParentApproved: true,
-        voicePhrase: 'Gấu bông siêu nhân xuất hiện! Không sợ bóng tối nữa nhé, ôm tớ nào! 🧸',
-        themeColor: AppColors.primaryContainer,
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      KidCharacter(
-        id: 'char_3',
-        name: 'Mèo Bay Cầu Vồng',
-        title: 'Bay vút đến xứ kẹo',
-        description: 'Chú mèo lông trắng muốt với đôi cánh cầu vồng lấp lánh như kẹo ngọt.',
-        drawingUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB4lFURVw3MFnAM_jkixmd-sSZbTj5vUAqMNNPMnvZOFqEeqvl9Heth4xoy-I8oOW0kJV6PL4BqM2aaoWuCvUbFWt1dDOWppC1n67h8x1Q8FNb9tD53OSCdNNsJELFEma3EW-suvrutg97hW4rILF40rNEDKKvOd313Oz5ueoNeK2c5augMITKuPvvZJFAm9V7pEDnSrlwndQBJX8im3wPxVyDCuLaNBgYgOxEOP1rBRZlpb6RvDMBl',
-        avatar3dUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB4lFURVw3MFnAM_jkixmd-sSZbTj5vUAqMNNPMnvZOFqEeqvl9Heth4xoy-I8oOW0kJV6PL4BqM2aaoWuCvUbFWt1dDOWppC1n67h8x1Q8FNb9tD53OSCdNNsJELFEma3EW-suvrutg97hW4rILF40rNEDKKvOd313Oz5ueoNeK2c5augMITKuPvvZJFAm9V7pEDnSrlwndQBJX8im3wPxVyDCuLaNBgYgOxEOP1rBRZlpb6RvDMBl',
-        isParentApproved: false, // Pending approval
-        voicePhrase: 'Meo meo! Tớ sẽ chở bé bay qua đám mây cầu vồng ngọt ngào nhé! 🐱🌈',
-        themeColor: AppColors.accentLilac,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-      KidCharacter(
-        id: 'char_4',
-        name: 'Cá Heo Biết Hát',
-        title: 'Giọng ca đại dương',
-        description: 'Chú cá heo xanh đeo tai nghe phát sáng, bơi lội và cất tiếng hát du dương.',
-        drawingUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCYeAtr_SNO28hkvZTX0egWOyh6LuQpnN9cNb6rZWBBZ8SmCLyl5k47SiuG9JubtTLk5eT4ucXfX71qGcDYnPaQFpzMfPGoF5Q8mkAhu_WTihgF5FtZj9UD4kXsGSDQ6ISneAh_rZtRBzUSsu4fvwIXI_xa8X1YZBJ-4rTr0QvwP7yFoK9y0UB4llWXsOswBd-nal_yixi57EOOjalqKuxxjveMAXAx5TIOEsferJq4NWKecEhSHR-z',
-        avatar3dUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCYeAtr_SNO28hkvZTX0egWOyh6LuQpnN9cNb6rZWBBZ8SmCLyl5k47SiuG9JubtTLk5eT4ucXfX71qGcDYnPaQFpzMfPGoF5Q8mkAhu_WTihgF5FtZj9UD4kXsGSDQ6ISneAh_rZtRBzUSsu4fvwIXI_xa8X1YZBJ-4rTr0QvwP7yFoK9y0UB4llWXsOswBd-nal_yixi57EOOjalqKuxxjveMAXAx5TIOEsferJq4NWKecEhSHR-z',
-        isParentApproved: true,
-        voicePhrase: 'La la la! Đại dương xanh mát vẫy gọi chúng mình cùng lướt sóng nào! 🐬🎵',
-        themeColor: AppColors.tertiaryContainer,
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ];
+    characters = [];
+    _completedStoryIds.clear();
+    heroCharacter = null;
+    companionCharacter = null;
 
-    heroCharacter = characters[0];
-    companionCharacter = characters[1];
-
-    // Initial Stories
-    stories = [
-      Story(
-        id: 'story_1',
-        title: 'Bí Mật Rừng Nấm Thần Tiên',
-        subtitle: 'Hành trình tìm quả táo vàng cứu muôn thú',
-        coverUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAs_lv4z1qjmjlVnYB1Fx7ZEM5eX-s2aK869C8tcCpLbLJ9Ahr2gQ26yT271kAkfCJNYxxaBd27nytcZomORvEw6ltfGqqkFqIzTRyAc6aEBg-QQr6XfjO_rp6gNLqlYRkVnVu04yBN_oQ9H5I6_BG6pRiH1A3bH9qX34ouH3lyXCvHT3VE92dxg6UFolkNh8YmyaH_UUQf607HiWOd6apZj7WfV9TO0OuqpV6LKqQPyFDSdEnkD-2p',
-        ageRange: '4 - 6 tuổi',
-        category: 'Phiêu lưu',
-        totalPages: 6,
-        currentPage: 3,
-        isCompleted: false,
-        heroRoleTitle: 'Dũng Sĩ Rừng Xanh 🦁',
-        companionRoleTitle: 'Thỏ Trắng Tinh Nghịch 🐰',
-        pages: [
-          const StoryPage(
-            pageNumber: 1,
-            imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAs_lv4z1qjmjlVnYB1Fx7ZEM5eX-s2aK869C8tcCpLbLJ9Ahr2gQ26yT271kAkfCJNYxxaBd27nytcZomORvEw6ltfGqqkFqIzTRyAc6aEBg-QQr6XfjO_rp6gNLqlYRkVnVu04yBN_oQ9H5I6_BG6pRiH1A3bH9qX34ouH3lyXCvHT3VE92dxg6UFolkNh8YmyaH_UUQf607HiWOd6apZj7WfV9TO0OuqpV6LKqQPyFDSdEnkD-2p',
-            textContent: 'Ở một thung lũng xa xôi, những cây nấm thần tiên bỗng tỏa ra ánh sáng lấp lánh lạ kỳ trong sớm mai...',
-          ),
-          const StoryPage(
-            pageNumber: 2,
-            imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDf3Tk84WeWhgHX1pHSLMVsCAYb0wd4mYJF9e2THfQ_dMG44GVPf_D1Ind_p0ga5qZasYVH8nteSidQzGhHhfjwLSzNk-TAE27fGMe37-nzioStOi4WCF2clzkBFuYk0gog3aGd4nbB4Lb2WmLJNf22qZC_vw7dyx6P1tnNKVM-GPGm-f_otlfyujoJ7Y1H1-hW5AtZ-V8cj2D3uNNvkyBVxtsn2kG7FdHnjzq34VW-bmLAYDgfvaTn',
-            textContent: 'Các loài thú nhỏ lo lắng vì cây cổ thụ đang héo úa. Chỉ có quả táo vàng phép thuật mới có thể chữa lành cho rừng xanh.',
-          ),
-          const StoryPage(
-            pageNumber: 3,
-            imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDToeEuGuXilp1aivNp1QhxJaBtvo2vY8Btd5vUkbOtYYf7ZBbToHqugpgE4UUIeGoxLaXec-n4ezNZOin3NEtSdH6DuysMgLpP140eKQgcnrwjpLDOXYj_hNhJjt8zfUlfDFyEnm63vK3chXxNWHBq3dFZWpX2gNfkUy2ErCpL_UMRk4Ar6PLwzgC_phiBDOQJcABD3qoTVFrzZ1p0lRXMxj5A6HC-Mvn2CD_bEIwMisesLgor1Fhb',
-            textContent: 'Ngày xửa ngày xưa, bạn Khủng Long Cam rất dũng cảm bước vào khu rừng thần tiên để tìm kiếm quả táo vàng giúp muôn thú khoẻ mạnh...',
-            vocab: VocabItem(
-              word: 'Dũng Cảm',
-              phonetic: '/dǔŋ ka᷉ːm/',
-              definition: 'Là khi em không ngại thử thách mới, dám bảo vệ bạn bè khi gặp khó khăn!',
-            ),
-          ),
-        ],
-        quiz: const QuizQuestion(
-          questionText: 'Trong câu chuyện, bạn Khủng Long Cam đã tìm thấy quả gì trong khu rừng thần tiên?',
-          visualClueUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBPyd-YDByYm83ZYDFRN-xLLU89Uu6wmyADyRyc4fGoRJERXNE2swCRX0It7wNiJUtxp414ObYVTUvwiOFZCtmWd-QDHPNrDDjHFOQBkSMLIqz6h-wtTGPPJDoVxjCVFmSCu11pk8WDx0iRBLxlaR-X2USS1_uJCPNRWtR0DvgVM6JWsMQ0Vc6TXQUOtRUcFTRUjoJR6-TjQ1FKeG2Sn7C1D7jsWFEQZlidk39j5R62ePdo6zSwp2eL',
-          options: ['Quả Táo Vàng ✨', 'Quả Dưa Hấu Khổng Lồ', 'Quả Chuối Xanh'],
-          optionEmojis: ['🍎', '🍉', '🍌'],
-          correctIndex: 0,
-          celebrationTitle: 'Chính xác rồi!',
-          celebrationMessage: 'Bé thông minh lắm, bạn Khủng Long Cam rất vui vì được chia sẻ táo vàng!',
-          rewardStars: 5,
-        ),
-      ),
-      const Story(
-        id: 'story_2',
-        title: 'Chú Chó Cứu Hỏa',
-        subtitle: 'Tranh vẽ bởi: Bé Bo',
-        coverUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDUnv_tax-sWDIH-HcFWNdoCvgDthGQqiO8QeAOEJWZjUZ_DMAf9NNU_otzEaE3cL7vyc8BIMjqUpV8EU7xlzYL-QTqdkUN6zggac0rhZg76J8esoO9xcstJMlf4ZHDtEDzBw47zuI0RpB9uk_Qg7tXnYH_Dp5rZ1I4Y9nOuhOtYYtJ2b0fX3QMwUkbD3YpFSvmGpCwcaWX4woNntNIbiGCySkl7UnkLdmmk0Nx_owAyXiAvkkA2tKb',
-        ageRange: '3 - 5 tuổi',
-        category: 'Động vật 🦁',
-        totalPages: 5,
-        currentPage: 5,
-        isCompleted: true,
-        pages: [],
-        quiz: QuizQuestion(
-          questionText: 'Chú chó cứu hỏa đã dùng thứ gì để dập lửa?',
-          visualClueUrl: '',
-          options: ['Vòi nước thần kỳ', 'Chiếc quạt mo', 'Cành cây'],
-          optionEmojis: ['💧', '🪭', '🌿'],
-          correctIndex: 0,
-          celebrationTitle: 'Giỏi quá!',
-          celebrationMessage: 'Chú chó đã cứu được ngôi nhà cây của các bạn!',
-        ),
-      ),
-      const Story(
-        id: 'story_3',
-        title: 'Khu Vườn Của Ong Vàng',
-        subtitle: 'Khám phá bí mật mật hoa',
-        coverUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDf3Tk84WeWhgHX1pHSLMVsCAYb0wd4mYJF9e2THfQ_dMG44GVPf_D1Ind_p0ga5qZasYVH8nteSidQzGhHhfjwLSzNk-TAE27fGMe37-nzioStOi4WCF2clzkBFuYk0gog3aGd4nbB4Lb2WmLJNf22qZC_vw7dyx6P1tnNKVM-GPGm-f_otlfyujoJ7Y1H1-hW5AtZ-V8cj2D3uNNvkyBVxtsn2kG7FdHnjzq34VW-bmLAYDgfvaTn',
-        ageRange: '4 - 7 tuổi',
-        category: 'Khoa học vui 🔬',
-        totalPages: 8,
-        currentPage: 4,
-        isCompleted: false,
-        pages: [],
-        quiz: QuizQuestion(
-          questionText: 'Ong mật lấy mật hoa bằng gì?',
-          visualClueUrl: '',
-          options: ['Vòi hút nhỏ', 'Hai chân trước', 'Đôi cánh'],
-          optionEmojis: ['🍯', '🐾', '🪽'],
-          correctIndex: 0,
-          celebrationTitle: 'Rất chính xác!',
-          celebrationMessage: 'Ong vàng chăm chỉ đã thu thập đầy hũ mật ngọt ngào!',
-        ),
-      ),
-    ];
-
-    currentStory = stories[0];
+    storyTemplates = [];
+    stories = [];
+    currentStory = emptyStory;
   }
 
-  // State mutation methods
-  void setCategory(String cat) {
-    selectedCategory = cat;
+  Future<void> login(
+    String name, {
+    String? token,
+    String? refreshToken,
+    String? username,
+    String? role,
+    UserProfile? profile,
+    String? avatarPath,
+  }) async {
+    // Dọn sạch dữ liệu bộ nhớ của tài khoản trước đó để không bị rò rỉ
+    characters = [];
+    _completedStoryIds.clear();
+    stories = stories.map((s) => s.copyWith(isCompleted: false)).toList();
+
+    if (name.trim().isNotEmpty) {
+      kidName = name.trim();
+    }
+    if (avatarPath != null && avatarPath.isNotEmpty) {
+      customAvatarPath = avatarPath;
+    }
+    if (token != null) {
+      authToken = token;
+    }
+    if (refreshToken != null) {
+      this.refreshToken = refreshToken;
+    }
+    if (username != null) {
+      childUsername = username;
+    }
+    if (role != null) {
+      userRole = role;
+    }
+    if (profile != null) {
+      userProfile = profile;
+    }
+    isLoggedIn = true;
+
+    // Immediately resolve child ID from JWT token so ChildProfileId is never empty or fallback
+    final extractedUserId = AppConfig.extractUserIdFromJwt(token);
+    if (extractedUserId != null) {
+      if (activeChildProfile == null ||
+          !AppConfig.isValidUuid(activeChildProfile?.id)) {
+        activeChildProfile = ChildProfile(
+          id: extractedUserId,
+          nickName: kidName,
+          dailyTimeLimit: screenTimeMinutesAllowed,
+          remainingTimeLimit: remainingTimeMinutesAllowed,
+          dailyCharacterLimit: dailyCharacterLimit,
+          remainingCharacterLimit: remainingCharacterLimit,
+          stars: stars,
+          streakDays: streakDays,
+        );
+      }
+    }
+
+    notifyListeners();
+
+    // Persist session to SharedPreferences (LocalStorage on Web)
+    try {
+      WidgetsFlutterBinding.ensureInitialized();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('sketchtale_logged_in', true);
+      if (authToken != null)
+        await prefs.setString('sketchtale_auth_token', authToken!);
+      if (this.refreshToken != null)
+        await prefs.setString('sketchtale_refresh_token', this.refreshToken!);
+      if (childUsername != null)
+        await prefs.setString('sketchtale_username', childUsername!);
+      await prefs.setString('sketchtale_nickname', kidName);
+      if (customAvatarPath != null)
+        await prefs.setString('sketchtale_child_avatar', customAvatarPath!);
+      if (userRole.isNotEmpty)
+        await prefs.setString('sketchtale_role', userRole);
+    } catch (e) {
+      debugPrint('[AppState] Lỗi lưu phiên đăng nhập: $e');
+    }
+
+    _loadCharactersFromPrefs();
+    _loadCompletedStoriesFromPrefs();
+    fetchStoryTemplates();
+    fetchChildProfiles();
+    fetchUserProfile();
+    fetchCharTypes();
+  }
+
+  /// Khôi phục phiên đăng nhập từ LocalStorage / SharedPreferences khi reload trang F5
+  Future<void> restoreSession() async {
+    try {
+      WidgetsFlutterBinding.ensureInitialized();
+      final prefs = await SharedPreferences.getInstance();
+      final savedLoggedIn = prefs.getBool('sketchtale_logged_in') ?? false;
+      final savedToken = prefs.getString('sketchtale_auth_token');
+      final savedUsername = prefs.getString('sketchtale_username');
+      final savedNickname = prefs.getString('sketchtale_nickname');
+      final savedRole = prefs.getString('sketchtale_role');
+      final savedAvatar = prefs.getString('sketchtale_child_avatar');
+      if (savedAvatar != null && savedAvatar.isNotEmpty) {
+        customAvatarPath = savedAvatar;
+      }
+
+      if (savedLoggedIn && savedToken != null && savedToken.isNotEmpty) {
+        authToken = savedToken;
+        refreshToken = prefs.getString('sketchtale_refresh_token');
+        if (savedUsername != null && savedUsername.isNotEmpty) {
+          childUsername = savedUsername;
+        }
+        if (savedNickname != null && savedNickname.isNotEmpty) {
+          kidName = savedNickname;
+        }
+        if (savedRole != null && savedRole.isNotEmpty) {
+          userRole = savedRole;
+        }
+        isLoggedIn = true;
+
+        // Immediately resolve child ID from JWT token on restore
+        final extractedUserId = AppConfig.extractUserIdFromJwt(authToken);
+        if (extractedUserId != null) {
+          if (activeChildProfile == null ||
+              !AppConfig.isValidUuid(activeChildProfile?.id)) {
+            activeChildProfile = ChildProfile(
+              id: extractedUserId,
+              nickName: kidName,
+              dailyTimeLimit: screenTimeMinutesAllowed,
+              remainingTimeLimit: remainingTimeMinutesAllowed,
+              dailyCharacterLimit: dailyCharacterLimit,
+              remainingCharacterLimit: remainingCharacterLimit,
+              stars: stars,
+              streakDays: streakDays,
+            );
+          }
+        }
+
+        notifyListeners();
+
+        // Tải lại dữ liệu đúng tài khoản sau khi khôi phục phiên
+        await _loadCharactersFromPrefs();
+        await _loadCompletedStoriesFromPrefs();
+        fetchStoryTemplates();
+        fetchChildProfiles();
+        fetchUserProfile();
+        fetchCharTypes();
+      } else {
+        // Chưa đăng nhập -> dọn sạch bộ nhớ
+        characters = [];
+        _completedStoryIds.clear();
+      }
+    } catch (e) {
+      debugPrint('[AppState] Lỗi khôi phục phiên: $e');
+    }
+  }
+
+  /// Tải danh sách hồ sơ của bé từ GET /api/child-profiles
+  Future<void> fetchChildProfiles() async {
+    isLoadingProfiles = true;
+    notifyListeners();
+
+    try {
+      final profiles = await ChildProfileService.fetchChildProfiles(
+        token: authToken,
+      );
+      final jwtUserId = AppConfig.extractUserIdFromJwt(authToken);
+      final effectiveUserId = currentUserId ?? jwtUserId;
+
+      if (profiles.isNotEmpty) {
+        setFallbackStatus('Hồ Sơ Của Bé', false);
+        childProfiles = profiles;
+
+        // 1. Khớp theo userId tài khoản
+        ChildProfile? matched;
+        if (effectiveUserId != null && effectiveUserId.isNotEmpty) {
+          matched = childProfiles.where(
+            (p) =>
+                (p.userId != null &&
+                    p.userId!.toLowerCase() == effectiveUserId.toLowerCase()) ||
+                p.id.toLowerCase() == effectiveUserId.toLowerCase(),
+          ).firstOrNull;
+        }
+
+        // 2. Khớp theo username hoặc tên bé nếu chưa khớp
+        if (matched == null && childUsername != null && childUsername!.isNotEmpty) {
+          matched = childProfiles.where(
+            (p) => p.nickName.toLowerCase() == childUsername!.toLowerCase(),
+          ).firstOrNull;
+        }
+
+        if (matched == null && kidName.isNotEmpty && kidName != 'Bé Bống' && kidName != 'Bé Đổng') {
+          matched = childProfiles.where(
+            (p) => p.nickName.toLowerCase() == kidName.toLowerCase(),
+          ).firstOrNull;
+        }
+
+        // 3. Nếu tìm thấy đúng hồ sơ của tài khoản đang đăng nhập -> gán activeChildProfile
+        if (matched != null) {
+          activeChildProfile = matched;
+          kidName = matched.nickName;
+          screenTimeMinutesAllowed = matched.dailyTimeLimit;
+          remainingTimeMinutesAllowed = matched.remainingTimeLimit;
+          dailyCharacterLimit = matched.dailyCharacterLimit;
+          remainingCharacterLimit = matched.remainingCharacterLimit;
+        } else if (activeChildProfile == null && userRole.toLowerCase() == 'parent') {
+          // Chỉ phụ huynh quản lý nhiều con thì mới mặc định chọn bé đầu tiên
+          activeChildProfile = childProfiles.first;
+          kidName = childProfiles.first.nickName;
+        }
+        // Lưu ý: Nếu là tài khoản Trẻ em không khớp danh sách, KHÔNG tự ý lấy childProfiles.first
+        // để tránh tình trạng đăng nhập tài khoản khác nhưng bị ghi đè thông tin bé khác.
+
+        final rec = recommendedStories;
+        if (rec.isNotEmpty) {
+          currentStory = rec.first;
+        }
+      } else {
+        childProfiles = [];
+      }
+    } catch (_) {
+      childProfiles = [];
+    } finally {
+      isLoadingProfiles = false;
+      notifyListeners();
+    }
+  }
+
+  /// Cập nhật hồ sơ bé lên Swagger API (PUT /api/child-profiles/{id})
+  Future<bool> updateActiveProfile(ChildProfile updated) async {
+    activeChildProfile = updated;
+    kidName = updated.nickName;
+    screenTimeMinutesAllowed = updated.dailyTimeLimit;
+    remainingTimeMinutesAllowed = updated.remainingTimeLimit;
+    dailyCharacterLimit = updated.dailyCharacterLimit;
+    remainingCharacterLimit = updated.remainingCharacterLimit;
+    notifyListeners();
+
+    if (updated.id.isNotEmpty && !updated.id.startsWith('local-')) {
+      final success = await ChildProfileService.updateChildProfile(
+        updated.id,
+        updated.toUpdateDto(),
+        token: authToken,
+      );
+      if (success) {
+        final idx = childProfiles.indexWhere((p) => p.id == updated.id);
+        if (idx != -1) {
+          childProfiles[idx] = updated;
+        }
+      }
+      return success;
+    }
+    return true;
+  }
+
+  /// Nhóm tuổi số tương ứng trong StoryTemplate (1: 3-5 tuổi, 2: 6-8 tuổi, 3: 9-12 tuổi)
+  int get currentChildAgeGroup {
+    if (activeChildProfile != null) {
+      return activeChildProfile!.matchedStoryAgeGroup;
+    }
+    return 2;
+  }
+
+  /// Tên nhãn độ tuổi thân thiện của bé
+  String get childAgeGroupLabel {
+    switch (currentChildAgeGroup) {
+      case 1:
+        return '3 - 5 tuổi';
+      case 2:
+        return '6 - 8 tuổi';
+      case 3:
+        return '9 - 12 tuổi';
+      default:
+        return 'Nhóm $currentChildAgeGroup';
+    }
+  }
+
+  /// Danh sách StoryTemplate được sắp xếp ưu tiên theo đúng độ tuổi của bé trước tiên
+  List<StoryTemplate> get recommendedStoryTemplates {
+    final targetAge = currentChildAgeGroup;
+    final list = List<StoryTemplate>.from(storyTemplates);
+    list.sort((a, b) {
+      final aMatch = (a.ageGroup == targetAge) ? 0 : 1;
+      final bMatch = (b.ageGroup == targetAge) ? 0 : 1;
+      if (aMatch != bMatch) return aMatch.compareTo(bMatch);
+      final aDist = (a.ageGroup - targetAge).abs();
+      final bDist = (b.ageGroup - targetAge).abs();
+      if (aDist != bDist) return aDist.compareTo(bDist);
+      return a.title.compareTo(b.title);
+    });
+    return list;
+  }
+
+  /// Danh sách Story được sắp xếp ưu tiên đề xuất theo độ tuổi của bé
+  List<Story> get recommendedStories {
+    final targetAge = currentChildAgeGroup;
+    final list = List<Story>.from(stories);
+    list.sort((a, b) {
+      final tA = storyTemplates.firstWhere(
+        (t) => t.id == a.id,
+        orElse: () => StoryTemplate(
+          id: a.id,
+          educationThemeId: '',
+          title: a.title,
+          description: a.subtitle,
+          ageGroup: _inferAgeGroupFromRange(a.ageRange),
+          coverImageUrl: '',
+          totalPageNumbers: 2,
+          status: 2,
+        ),
+      );
+      final tB = storyTemplates.firstWhere(
+        (t) => t.id == b.id,
+        orElse: () => StoryTemplate(
+          id: b.id,
+          educationThemeId: '',
+          title: b.title,
+          description: b.subtitle,
+          ageGroup: _inferAgeGroupFromRange(b.ageRange),
+          coverImageUrl: '',
+          totalPageNumbers: 2,
+          status: 2,
+        ),
+      );
+      final aMatch = (tA.ageGroup == targetAge) ? 0 : 1;
+      final bMatch = (tB.ageGroup == targetAge) ? 0 : 1;
+      if (aMatch != bMatch) return aMatch.compareTo(bMatch);
+      final aDist = (tA.ageGroup - targetAge).abs();
+      final bDist = (tB.ageGroup - targetAge).abs();
+      if (aDist != bDist) return aDist.compareTo(bDist);
+      return a.title.compareTo(b.title);
+    });
+    return list;
+  }
+
+  int _inferAgeGroupFromRange(String range) {
+    if (range.contains('3') || range.contains('4') || range.contains('5'))
+      return 1;
+    if (range.contains('6') || range.contains('7') || range.contains('8'))
+      return 2;
+    if (range.contains('9') ||
+        range.contains('10') ||
+        range.contains('11') ||
+        range.contains('12'))
+      return 3;
+    return 2;
+  }
+
+  /// Đổi bé đang sử dụng ứng dụng
+  void selectChildProfile(ChildProfile profile) {
+    activeChildProfile = profile;
+    kidName = profile.nickName;
+    screenTimeMinutesAllowed = profile.dailyTimeLimit;
+    remainingTimeMinutesAllowed = profile.remainingTimeLimit;
+    dailyCharacterLimit = profile.dailyCharacterLimit;
+    remainingCharacterLimit = profile.remainingCharacterLimit;
+    final rec = recommendedStories;
+    if (rec.isNotEmpty) {
+      currentStory = rec.first;
+    }
+    syncCompletedStoriesFromBackend();
+    notifyListeners();
+  }
+
+  /// Fetches story templates and education themes from backend API,
+  /// sorting them strictly by ageGroup ascending (từ thấp đến cao).
+  Future<void> fetchStoryTemplates() async {
+    // If not logged in and no token, avoid making protected calls that return 401
+    if (!isLoggedIn && (authToken == null || authToken!.isEmpty)) {
+      return;
+    }
+
+    isLoadingStories = true;
+    storyLoadError = null;
+    notifyListeners();
+
+    try {
+      final result = await StoryService.fetchStoriesSortedByAgeGroup(
+        token: authToken,
+      );
+      if (result.templates.isNotEmpty) {
+        setFallbackStatus('Thư Viện Truyện', false);
+        storyTemplates = result.templates;
+        educationThemes = result.themes;
+        final convertedStories = storyTemplates
+            .map((t) => t.toStory())
+            .map((s) => s.copyWith(isCompleted: _completedStoryIds.contains(s.id)))
+            .toList();
+        if (convertedStories.isNotEmpty) {
+          stories = convertedStories;
+          final rec = recommendedStories;
+          final unreadStory = rec.firstWhere(
+            (s) => !s.isCompleted && !_completedStoryIds.contains(s.id),
+            orElse: () => rec.isNotEmpty ? rec.first : stories[0],
+          );
+          currentStory = unreadStory;
+        }
+      } else {
+        storyTemplates = [];
+        stories = [];
+        setFallbackStatus('Thư Viện Truyện', false);
+        if (result.errorMessage != null) {
+          storyLoadError = result.errorMessage;
+        }
+      }
+    } catch (e) {
+      storyTemplates = [];
+      stories = [];
+      setFallbackStatus('Thư Viện Truyện', false);
+      storyLoadError = e.toString();
+    } finally {
+      isLoadingStories = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetches pages for a story template and updates state
+  Future<StoryTemplate> loadStoryTemplatePages(StoryTemplate template) async {
+    if (template.pages.isNotEmpty &&
+        template.pages.length >= template.totalPageNumbers) {
+      return template;
+    }
+    isLoadingStoryPages = true;
+    notifyListeners();
+    try {
+      final pages = await StoryService.fetchStoryTemplatePages(
+        template.id,
+        token: authToken,
+        storyTitle: template.title,
+        totalPages: template.totalPageNumbers,
+      );
+      if (pages.isNotEmpty) {
+        final updated = template.copyWith(pages: pages);
+        final idx = storyTemplates.indexWhere((t) => t.id == template.id);
+        if (idx != -1) {
+          storyTemplates[idx] = updated;
+        }
+        final storyIdx = stories.indexWhere((s) => s.id == template.id);
+        if (storyIdx != -1) {
+          stories[storyIdx] = updated.toStory();
+        } else {
+          stories.add(updated.toStory());
+        }
+        if (currentStory.id == template.id) {
+          currentStory = updated.toStory();
+        }
+        return updated;
+      }
+    } catch (_) {
+    } finally {
+      isLoadingStoryPages = false;
+      notifyListeners();
+    }
+    return template;
+  }
+
+  /// Implements Section 3: Logout & JWT Blacklist
+  Future<void> logout() async {
+    final tokenToInvalidate = authToken;
+    isLoggedIn = false;
+    authToken = null;
+    refreshToken = null;
+    childUsername = null;
+    userProfile = null;
+    activeChildProfile = null;
+    customAvatarPath = null;
+    kidName = '';
+    childProfiles = [];
+    characters = [];
+    _completedStoryIds.clear();
+    stories = stories.map((s) => s.copyWith(isCompleted: false)).toList();
+    userRole = 'Child';
+    notifyListeners();
+
+    // Clear saved session from SharedPreferences
+    try {
+      WidgetsFlutterBinding.ensureInitialized();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('sketchtale_logged_in');
+      await prefs.remove('sketchtale_auth_token');
+      await prefs.remove('sketchtale_refresh_token');
+      await prefs.remove('sketchtale_username');
+      await prefs.remove('sketchtale_nickname');
+      await prefs.remove('sketchtale_role');
+      await prefs.remove('sketchtale_child_avatar');
+      // Xóa bỏ key toàn cục cũ để tránh rò rỉ nhân vật sang tài khoản khác
+      await prefs.remove('sketchtale_characters_v2');
+    } catch (e) {
+      debugPrint('[AppState] Lỗi xóa phiên: $e');
+    }
+
+    if (tokenToInvalidate != null && tokenToInvalidate.isNotEmpty) {
+      await AuthService.logout(token: tokenToInvalidate);
+    }
+  }
+
+  /// Implements Section 4: Refresh Token Rotation
+  Future<bool> refreshSession() async {
+    if (authToken == null && refreshToken == null) return false;
+    final res = await AuthService.refreshToken(
+      token: authToken,
+      refreshToken: refreshToken,
+    );
+    if (res.isSuccess && res.token != null) {
+      authToken = res.token;
+      if (res.refreshToken != null) {
+        refreshToken = res.refreshToken;
+      }
+      if (res.role != null) {
+        userRole = res.role!;
+      }
+      notifyListeners();
+      return true;
+    } else {
+      // 7-day refresh token expired -> Logout immediately
+      await logout();
+      return false;
+    }
+  }
+
+  /// Fetches User Profile from GET /api/auth/profile
+  Future<void> fetchUserProfile() async {
+    if (authToken == null || authToken!.isEmpty) return;
+    try {
+      final profile = await AuthService.getProfile(token: authToken!);
+      if (profile != null) {
+        userProfile = profile;
+        userRole = profile.role;
+        if (profile.parentProfile != null) {
+          parentCredits = profile.parentProfile!.remainingMonthlyCreditLimit;
+        }
+
+        // Đồng bộ chuẩn xác thông tin tài khoản đang đăng nhập
+        if (profile.isChild) {
+          if (profile.childProfile != null && profile.childProfile!.isNotEmpty) {
+            final child = ChildProfile.fromJson(profile.childProfile!);
+            activeChildProfile = child;
+            if (child.nickName.isNotEmpty) {
+              kidName = child.nickName;
+            }
+            screenTimeMinutesAllowed = child.dailyTimeLimit;
+            remainingTimeMinutesAllowed = child.remainingTimeLimit;
+            dailyCharacterLimit = child.dailyCharacterLimit;
+            remainingCharacterLimit = child.remainingCharacterLimit;
+          } else {
+            if (profile.displayName.isNotEmpty) {
+              kidName = profile.displayName;
+            } else if (profile.username.isNotEmpty) {
+              kidName = profile.username;
+            }
+          }
+        }
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  final Set<String> _completedStoryIds = {};
+  Set<String> get completedStoryIds => Set.unmodifiable(_completedStoryIds);
+
+  List<Story> get completedStories {
+    return stories.where((s) => s.isCompleted || _completedStoryIds.contains(s.id)).toList();
+  }
+
+  void markStoryCompleted(String storyId) {
+    _completedStoryIds.add(storyId);
+    final idx = stories.indexWhere((s) => s.id == storyId);
+    if (idx != -1) {
+      stories[idx] = stories[idx].copyWith(isCompleted: true);
+    }
+    if (currentStory.id == storyId) {
+      currentStory = currentStory.copyWith(isCompleted: true);
+    }
+    _saveCompletedStoriesToPrefs();
+    notifyListeners();
+  }
+
+  void selectStory(Story story) => setCurrentStory(story);
+
+  void setCurrentStory(Story story) {
+    currentStory = story;
+    notifyListeners();
+  }
+
+  void assignHeroCharacter(KidCharacter? character) {
+    heroCharacter = character;
+    notifyListeners();
+  }
+
+  void assignCompanionCharacter(KidCharacter? character) {
+    companionCharacter = character;
+    notifyListeners();
+  }
+
+  void setHeroCharacter(KidCharacter? character) => assignHeroCharacter(character);
+
+  void setCompanionCharacter(KidCharacter? character) => assignCompanionCharacter(character);
+
+  void setSelectedCategory(String category) {
+    selectedCategory = category;
+    notifyListeners();
+  }
+
+  void setPersonality(String personality) {
+    selectedPersonality = personality;
     notifyListeners();
   }
 
@@ -199,61 +840,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setHeroCharacter(KidCharacter char) {
-    heroCharacter = char;
+  void addStrokeLine(List<DrawingPoint> line) {
+    strokeLines.add(line);
     notifyListeners();
   }
 
-  void setCompanionCharacter(KidCharacter char) {
-    companionCharacter = char;
-    notifyListeners();
-  }
-
-  void setCurrentStory(Story story) {
-    currentStory = story;
-    notifyListeners();
-  }
-
-  void addCharacter(KidCharacter newChar) {
-    characters.insert(0, newChar);
-    notifyListeners();
-  }
-
-  void approveCharacter(String charId) {
-    final idx = characters.indexWhere((c) => c.id == charId);
-    if (idx != -1) {
-      characters[idx] = characters[idx].copyWith(isParentApproved: true);
-      notifyListeners();
-    }
-  }
-
-  void setScreenTimeLimit(int minutes) {
-    screenTimeMinutesAllowed = minutes;
-    notifyListeners();
-  }
-
-  // Drawing Canvas Methods
-  void addStrokePoint(Offset point) {
-    final paint = Paint()
-      ..color = isEraserMode ? AppColors.surfaceContainerLowest : currentBrushColor
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true
-      ..strokeWidth = isEraserMode ? (currentBrushSize * 2.5) : currentBrushSize;
-
-    if (strokeLines.isEmpty) {
-      strokeLines.add([DrawingPoint(offset: point, paint: paint)]);
-    } else {
-      strokeLines.last.add(DrawingPoint(offset: point, paint: paint));
-    }
-    notifyListeners();
-  }
-
-  void startNewStroke() {
-    strokeLines.add([]);
-    notifyListeners();
-  }
-
-  void undoStroke() {
+  void undoLastStroke() {
     if (strokeLines.isNotEmpty) {
       strokeLines.removeLast();
       notifyListeners();
@@ -271,18 +863,342 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setBrushSize(double size) {
-    currentBrushSize = size;
-    notifyListeners();
-  }
-
   void setEraserMode(bool enabled) {
     isEraserMode = enabled;
     notifyListeners();
   }
 
-  void setScannerMode(bool isScanner) {
-    isCameraScannerMode = isScanner;
+  void setCameraScannerMode(bool enabled) {
+    isCameraScannerMode = enabled;
     notifyListeners();
+  }
+
+  String get _userStorageSuffix {
+    if (currentUserId != null && currentUserId!.isNotEmpty) {
+      return currentUserId!;
+    }
+    if (childUsername != null && childUsername!.isNotEmpty) {
+      return childUsername!;
+    }
+    if (kidName.isNotEmpty && kidName != 'Bé Bống' && kidName != 'Bé Đổng') {
+      return kidName;
+    }
+    return 'guest';
+  }
+
+  String get _charactersStorageKey => 'sketchtale_characters_$_userStorageSuffix';
+  String get _completedStoriesStorageKey => 'sketchtale_completed_stories_$_userStorageSuffix';
+
+  Future<void> _loadCompletedStoriesFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_completedStoriesStorageKey);
+      _completedStoryIds.clear();
+      if (list != null && list.isNotEmpty) {
+        _completedStoryIds.addAll(list);
+        for (var i = 0; i < stories.length; i++) {
+          if (_completedStoryIds.contains(stories[i].id)) {
+            stories[i] = stories[i].copyWith(isCompleted: true);
+          }
+        }
+        if (_completedStoryIds.contains(currentStory.id)) {
+          currentStory = currentStory.copyWith(isCompleted: true);
+        }
+      } else {
+        for (var i = 0; i < stories.length; i++) {
+          stories[i] = stories[i].copyWith(isCompleted: false);
+        }
+        if (currentStory.isCompleted) {
+          currentStory = currentStory.copyWith(isCompleted: false);
+        }
+      }
+      notifyListeners();
+      // Đồng bộ thêm từ máy chủ Backend nếu có hồ sơ bé
+      syncCompletedStoriesFromBackend();
+    } catch (e) {
+      debugPrint('[AppState] Lỗi tải truyện hoàn thành: $e');
+    }
+  }
+
+  Future<void> _saveCompletedStoriesToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_completedStoriesStorageKey, _completedStoryIds.toList());
+    } catch (e) {
+      debugPrint('[AppState] Lỗi lưu truyện hoàn thành: $e');
+    }
+  }
+
+  /// Đồng bộ danh sách truyện đã hoàn thành từ Backend API
+  /// GET /api/reading-logs/child-profiles/{childProfileId}/completed
+  Future<void> syncCompletedStoriesFromBackend() async {
+    final childId = activeChildProfile?.id;
+    if (childId == null || !AppConfig.isValidUuid(childId)) return;
+
+    try {
+      final remoteCompleted = await ReadingLogService.fetchCompletedStories(
+        childProfileId: childId,
+        token: authToken,
+      );
+
+      if (remoteCompleted.isNotEmpty) {
+        bool hasChanges = false;
+        for (final item in remoteCompleted) {
+          if (item.storyTemplateId.isNotEmpty && !_completedStoryIds.contains(item.storyTemplateId)) {
+            _completedStoryIds.add(item.storyTemplateId);
+            hasChanges = true;
+          }
+        }
+
+        if (hasChanges) {
+          for (var i = 0; i < stories.length; i++) {
+            if (_completedStoryIds.contains(stories[i].id)) {
+              stories[i] = stories[i].copyWith(isCompleted: true);
+            }
+          }
+          if (_completedStoryIds.contains(currentStory.id)) {
+            currentStory = currentStory.copyWith(isCompleted: true);
+          }
+          await _saveCompletedStoriesToPrefs();
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppState] Lỗi đồng bộ truyện đã đọc từ Backend: $e');
+    }
+  }
+
+  Future<void> _saveCharactersToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final listJson = jsonEncode(characters.map((c) => c.toJson()).toList());
+      await prefs.setString(_charactersStorageKey, listJson);
+    } catch (e) {
+      debugPrint('[AppState] Lỗi lưu nhân vật vào LocalStorage: $e');
+    }
+  }
+
+  Future<void> _loadCharactersFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString(_charactersStorageKey);
+      if (str != null && str.isNotEmpty) {
+        final decoded = jsonDecode(str);
+        if (decoded is List) {
+          characters = decoded
+              .whereType<Map<String, dynamic>>()
+              .map((j) => KidCharacter.fromJson(j))
+              .toList();
+          notifyListeners();
+          return;
+        }
+      }
+      // Nếu tài khoản này chưa có nhân vật riêng thì đặt rỗng, không mượn nhân vật tài khoản khác
+      characters = [];
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[AppState] Lỗi tải nhân vật từ LocalStorage: $e');
+      characters = [];
+    }
+  }
+
+  Future<void> reloadUserLocalData() async {
+    await _loadCharactersFromPrefs();
+    await _loadCompletedStoriesFromPrefs();
+    notifyListeners();
+  }
+
+  void addNewCharacter(KidCharacter char) {
+    final idx = characters.indexWhere((c) => c.id == char.id);
+    if (idx != -1) {
+      characters[idx] = char;
+    } else {
+      characters.insert(0, char);
+    }
+    // KHÔNG tự động gán làm heroCharacter khi chưa được phụ huynh duyệt
+    // heroCharacter chỉ được gán khi bé chủ động chọn vào vai diễn trong truyện
+    _saveCharactersToPrefs();
+    notifyListeners();
+  }
+
+  void updateCharacterName(String charId, String newName) {
+    final idx = characters.indexWhere((c) => c.id == charId);
+    if (idx != -1) {
+      characters[idx] = characters[idx].copyWith(name: newName);
+      _saveCharactersToPrefs();
+      notifyListeners();
+    }
+  }
+
+  void removeCharacter(String charId) {
+    characters.removeWhere((c) => c.id == charId);
+    _saveCharactersToPrefs();
+    notifyListeners();
+  }
+
+  void addCharacter(KidCharacter char) => addNewCharacter(char);
+
+  void setScreenTimeLimit(int minutes) {
+    screenTimeMinutesAllowed = minutes;
+    notifyListeners();
+  }
+
+  void appendPointToLastStroke(DrawingPoint point) {
+    if (strokeLines.isNotEmpty) {
+      strokeLines.last.add(point);
+      notifyListeners();
+    }
+  }
+
+  void approveCharacter(String charId) {
+    final idx = characters.indexWhere((c) => c.id == charId);
+    if (idx != -1) {
+      characters[idx] = characters[idx].copyWith(isParentApproved: true);
+      _saveCharactersToPrefs();
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // WORKFLOW 3: CHARACTER CREATION & LIMITS
+  // ==========================================
+  /// Deduct 1 character creation attempt
+  void useCharacterCreationAttempt() {
+    if (remainingCharacterLimit > 0) {
+      remainingCharacterLimit -= 1;
+      if (activeChildProfile != null) {
+        activeChildProfile = activeChildProfile!.copyWith(
+          remainingCharacterLimit: remainingCharacterLimit,
+        );
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Restore 1 character creation attempt (e.g. if kid cancels or generation fails)
+  void restoreCharacterCreationAttempt() {
+    remainingCharacterLimit += 1;
+    if (activeChildProfile != null) {
+      activeChildProfile = activeChildProfile!.copyWith(
+        remainingCharacterLimit: remainingCharacterLimit,
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Synchronizes parent credits and daily limits after Stage 1 or Stage 2 AI calls
+  void updateCreditsAndLimits({int? remainingCredits, int? remainingLimit}) {
+    bool hasChanged = false;
+    if (remainingCredits != null && remainingCredits != parentCredits) {
+      parentCredits = remainingCredits;
+      hasChanged = true;
+    }
+    if (remainingLimit != null && remainingLimit != remainingCharacterLimit) {
+      remainingCharacterLimit = remainingLimit;
+      if (activeChildProfile != null) {
+        activeChildProfile = activeChildProfile!.copyWith(
+          remainingCharacterLimit: remainingLimit,
+        );
+      }
+      hasChanged = true;
+    }
+    if (hasChanged) {
+      notifyListeners();
+    }
+  }
+
+  /// Tải danh mục loại nhân vật (CharTypes) từ backend
+  Future<void> fetchCharTypes() async {
+    if (!isLoggedIn && (authToken == null || authToken!.isEmpty)) {
+      charTypes = [];
+      return;
+    }
+
+    isLoadingCharTypes = true;
+    notifyListeners();
+    try {
+      charTypes = await CharTypeService.fetchCharTypes(token: authToken);
+    } catch (_) {
+      charTypes = [];
+    } finally {
+      isLoadingCharTypes = false;
+      notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // WORKFLOW 2: ROLE ASSIGNMENT MAPPING
+  // ==========================================
+  /// Gán nhân vật vào vai diễn truyện (POST /api/user-story-character-mappings)
+  Future<UserStoryCharacterMapping?> assignCharacterRole({
+    required String storyId,
+    required String storyRoleTemplateId,
+    required String characterId,
+  }) async {
+    final result = await CharacterMappingService.assignCharacterToRole(
+      generatedStoryId: storyId,
+      storyRoleTemplateId: storyRoleTemplateId,
+      characterId: characterId,
+      token: authToken,
+    );
+    if (result != null) {
+      final key =
+          '${storyId.toLowerCase().trim()}:${storyRoleTemplateId.toLowerCase().trim()}';
+      storyRoleMappings[key] = result;
+    }
+    notifyListeners();
+    return result;
+  }
+
+  /// Resolves a custom `KidCharacter` ONLY if the child explicitly assigned one to `(storyId, roleId)`.
+  /// AND the character has been verified and approved by the parent (`isParentApproved == true`).
+  KidCharacter? getMappedCharacterForRole(String storyId, String? roleId) {
+    if (roleId == null || roleId.isEmpty) return null;
+    final key =
+        '${storyId.toLowerCase().trim()}:${roleId.toLowerCase().trim()}';
+    final mapping = storyRoleMappings[key];
+    if (mapping == null || !mapping.isApproved) return null;
+    for (final c in characters) {
+      if (c.id == mapping.characterId) {
+        // Chỉ cho phép nhân vật đã được Ba Mẹ phê duyệt tham gia vào truyện
+        if (!c.isParentApproved) return null;
+        return c;
+      }
+    }
+    return null;
+  }
+
+  /// Khôi phục vai diễn về mẫu gốc của Content Manager (CM)
+  void clearRoleMapping(String storyId, String roleId) {
+    final key =
+        '${storyId.toLowerCase().trim()}:${roleId.toLowerCase().trim()}';
+    storyRoleMappings.remove(key);
+    notifyListeners();
+  }
+
+  /// Khôi phục toàn bộ các vai diễn trong truyện về mẫu gốc của Content Manager (CM)
+  void resetRoleMappingsForStory(String storyId) {
+    final prefix = '${storyId.toLowerCase().trim()}:';
+    storyRoleMappings.removeWhere((key, _) => key.startsWith(prefix));
+    heroCharacter = null;
+    companionCharacter = null;
+    notifyListeners();
+  }
+
+  // ==========================================
+  // LUỒNG 8: BÁO CÁO NỘI DUNG AN TOÀN CHO BÉ
+  // ==========================================
+  /// Gửi báo cáo nội dung không phù hợp (POST /api/content-reports)
+  Future<ContentReportResult> reportContent({
+    required ReportTargetType targetType,
+    required String targetId,
+    required String reason,
+  }) async {
+    return await ContentReportService.reportContent(
+      targetType: targetType,
+      targetId: targetId,
+      reason: reason,
+      token: authToken,
+    );
   }
 }
