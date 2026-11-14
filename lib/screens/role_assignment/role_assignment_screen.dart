@@ -276,8 +276,9 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
 
     final title = 'VAI ${index + 1}: ${roleName.toUpperCase()}';
 
-    final desc = effectiveRole?.description.isNotEmpty == true
-        ? effectiveRole!.description
+    final roleDesc = effectiveRole?.description;
+    final String desc = (roleDesc != null && roleDesc.isNotEmpty)
+        ? roleDesc
         : (index == 0
             ? 'Nhân vật dẫn dắt câu chuyện cổ tích'
             : 'Người bạn trung thành sẻ chia mọi khó khăn');
