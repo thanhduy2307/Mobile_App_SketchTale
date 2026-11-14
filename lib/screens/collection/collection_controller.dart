@@ -76,6 +76,7 @@ class CollectionController extends ChangeNotifier {
       loadQuizHistory(childId, appState.authToken),
       loadCreditLogs(appState.authToken),
       appState.syncCompletedStoriesFromBackend(),
+      appState.syncCharactersFromBackend(),
     ]);
 
     isRefreshing = false;

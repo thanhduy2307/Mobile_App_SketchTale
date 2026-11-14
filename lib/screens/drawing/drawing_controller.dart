@@ -482,6 +482,15 @@ class DrawingController extends ChangeNotifier {
           return;
         }
 
+        // Cập nhật tên nhân vật lên máy chủ Backend nếu có
+        if (finalName.isNotEmpty && AppConfig.isValidUuid(genData.characterId)) {
+          CharacterService.updateCharacterName(
+            characterId: genData.characterId,
+            newName: finalName,
+            token: appState.authToken,
+          ).ignore();
+        }
+
         // Lưu vào AppState & LocalStorage SharedPreferences
         final newChar = KidCharacter(
           id: genData.characterId,

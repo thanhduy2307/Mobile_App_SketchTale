@@ -4,17 +4,19 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
 import '../collection_styles.dart';
 
-/// 🎨 Card hiển thị bạn nhỏ 3D trong Tủ Đồ của bé
+/// Card hien thi ban nho 3D trong Tu Do cua be
 class CharacterCard extends StatelessWidget {
   final KidCharacter character;
   final VoidCallback onPlaySound;
   final VoidCallback onRoleplay;
+  final VoidCallback? onRename;
 
   const CharacterCard({
     super.key,
     required this.character,
     required this.onPlaySound,
     required this.onRoleplay,
+    this.onRename,
   });
 
   @override
@@ -119,11 +121,29 @@ class CharacterCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  character.name,
-                  style: AppTypography.headlineSm(color: AppColors.onSurface),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        character.name,
+                        style: AppTypography.headlineSm(color: AppColors.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (onRename != null)
+                      GestureDetector(
+                        onTap: onRename,
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 Text(
                   character.title,

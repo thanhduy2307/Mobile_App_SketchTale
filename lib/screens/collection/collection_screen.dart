@@ -18,11 +18,11 @@ import 'components/completed_story_card.dart';
 export 'collection_controller.dart';
 export 'collection_styles.dart';
 
-/// 🎒 Màn hình Tủ Đồ & Góc Của Bé (Clean View Component)
-/// Cấu trúc theo mô hình React JSX + CSS:
-/// - Controller [CollectionController] quản lý State & Logic
-/// - Stylesheet [CollectionStyles] quản lý định dạng Box/Text
-/// - Giao diện tinh giản, hiển thị 3 Segment: Nhân vật 3D, Truyện đã đọc, Thành tích
+/// Man hinh Tu Do & Goc Cua Be (Clean View Component)
+/// Cau truc theo mo hinh React JSX + CSS:
+/// - Controller [CollectionController] quan ly State & Logic
+/// - Stylesheet [CollectionStyles] quan ly dinh dang Box/Text
+/// - Giao dien tinh gian, hien thi 3 Segment: Nhan vat 3D, Truyen da doc, Thanh tich
 class CollectionScreen extends StatefulWidget {
   final AppState appState;
   final VoidCallback onOpenDrawing;
@@ -83,6 +83,49 @@ class _CollectionScreenState extends State<CollectionScreen> {
           appState: widget.appState,
         ),
       ),
+    );
+  }
+
+  void _onRenameCharacter(KidCharacter char) {
+    final textController = TextEditingController(text: char.name);
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Đổi tên nhân vật'),
+          content: TextField(
+            controller: textController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Nhập tên mới...',
+              filled: true,
+              fillColor: AppColors.surfaceContainerLow,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final newName = textController.text.trim();
+                if (newName.isNotEmpty) {
+                  Navigator.of(ctx).pop();
+                  await widget.appState.updateCharacterName(char.id, newName);
+                  _showToast('Đã đổi tên thành công thành "$newName"');
+                }
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -190,6 +233,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
               character: state.characters[idx],
               onPlaySound: () => _playSound(state.characters[idx]),
               onRoleplay: () => _onRoleplay(state.characters[idx]),
+              onRename: () => _onRenameCharacter(state.characters[idx]),
             ),
           )
         else
@@ -201,6 +245,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
                   character: char,
                   onPlaySound: () => _playSound(char),
                   onRoleplay: () => _onRoleplay(char),
+                  onRename: () => _onRenameCharacter(char),
                 ),
               );
             }).toList(),

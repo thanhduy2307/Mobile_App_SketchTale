@@ -313,6 +313,12 @@ class AppConfig {
   /// PUT /api/characters/{id}/reject (Parent only)
   static String characterRejectUrl(String id) => '$baseUrl/api/characters/$id/reject';
 
+  /// GET /api/characters/child-profiles/{childId} (Lấy toàn bộ danh sách nhân vật của một bé)
+  static String childCharactersUrl(String childId) => '$baseUrl/api/characters/child-profiles/$childId';
+
+  /// PUT /api/characters/{characterId}/name (Cập nhật tên nhân vật)
+  static String updateCharacterNameUrl(String characterId) => '$baseUrl/api/characters/$characterId/name';
+
   // ==========================================
   // CREDIT TRANSACTION LOGS ENDPOINTS
   // ==========================================

@@ -9,6 +9,7 @@ import '../services/character_mapping_service.dart';
 import '../services/char_type_service.dart';
 import '../services/content_report_service.dart';
 import '../services/reading_log_service.dart';
+import '../services/character_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_config.dart';
 
@@ -588,6 +589,7 @@ class AppState extends ChangeNotifier {
       currentStory = rec.first;
     }
     syncCompletedStoriesFromBackend();
+    syncCharactersFromBackend();
     notifyListeners();
   }
 
@@ -990,12 +992,14 @@ class AppState extends ChangeNotifier {
               .map((j) => KidCharacter.fromJson(j))
               .toList();
           notifyListeners();
+          syncCharactersFromBackend();
           return;
         }
       }
       // Nếu tài khoản này chưa có nhân vật riêng thì đặt rỗng, không mượn nhân vật tài khoản khác
       characters = [];
       notifyListeners();
+      syncCharactersFromBackend();
     } catch (e) {
       debugPrint('[AppState] Lỗi tải nhân vật từ LocalStorage: $e');
       characters = [];
@@ -1005,7 +1009,30 @@ class AppState extends ChangeNotifier {
   Future<void> reloadUserLocalData() async {
     await _loadCharactersFromPrefs();
     await _loadCompletedStoriesFromPrefs();
+    syncCharactersFromBackend();
     notifyListeners();
+  }
+
+  /// Đồng bộ danh sách nhân vật của bé từ Backend API
+  /// GET /api/characters/child-profiles/{childId}
+  Future<void> syncCharactersFromBackend() async {
+    final childId = activeChildProfile?.id;
+    if (childId == null || !AppConfig.isValidUuid(childId)) return;
+
+    try {
+      final remoteList = await CharacterService.fetchCharactersByChildId(
+        childId: childId,
+        token: authToken,
+      );
+
+      if (remoteList.isNotEmpty) {
+        characters = remoteList;
+        await _saveCharactersToPrefs();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[AppState] Lỗi đồng bộ nhân vật từ Backend: $e');
+    }
   }
 
   void addNewCharacter(KidCharacter char) {
@@ -1021,12 +1048,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateCharacterName(String charId, String newName) {
+  Future<void> updateCharacterName(String charId, String newName) async {
     final idx = characters.indexWhere((c) => c.id == charId);
     if (idx != -1) {
       characters[idx] = characters[idx].copyWith(name: newName);
       _saveCharactersToPrefs();
       notifyListeners();
+    }
+    if (AppConfig.isValidUuid(charId)) {
+      try {
+        await CharacterService.updateCharacterName(
+          characterId: charId,
+          newName: newName,
+          token: authToken,
+        );
+      } catch (e) {
+        debugPrint('[AppState] Lỗi gọi updateCharacterName API: $e');
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../models/models.dart';
 import '../utils/app_config.dart';
 
 /// Result wrapper for Character operations
@@ -236,6 +237,149 @@ class CharacterService {
       return CharacterActionResult.failure(errMsg);
     } catch (e) {
       return CharacterActionResult.failure('Lỗi kết nối khi từ chối nhân vật: $e');
+    }
+  }
+
+  /// 6. Lấy toàn bộ danh sách nhân vật của bé theo ChildId
+  /// GET /api/characters/child-profiles/{childId}
+  static Future<List<KidCharacter>> fetchCharactersByChildId({
+    required String childId,
+    String? token,
+  }) async {
+    if (!AppConfig.isValidUuid(childId)) return [];
+
+    final url = Uri.parse(AppConfig.childCharactersUrl(childId));
+    try {
+      final headers = <String, String>{
+        'Accept': 'application/json',
+      };
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.get(url, headers: headers).timeout(
+            const Duration(seconds: 15),
+          );
+
+      if (kDebugMode) {
+        debugPrint('[CharacterService] GET $url -> ${response.statusCode}');
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          return decoded
+              .whereType<Map<String, dynamic>>()
+              .map((j) => KidCharacter.fromJson(j))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CharacterService] Exception fetchCharactersByChildId: $e');
+      }
+      return [];
+    }
+  }
+
+  /// 7. Cập nhật tên nhân vật theo CharacterId
+  /// PUT /api/characters/{characterId}/name
+  static Future<CharacterActionResult> updateCharacterName({
+    required String characterId,
+    required String newName,
+    String? token,
+  }) async {
+    if (!AppConfig.isValidUuid(characterId)) {
+      return CharacterActionResult.failure('ID nhân vật không hợp lệ.');
+    }
+
+    final trimmedName = newName.trim();
+    if (trimmedName.isEmpty) {
+      return CharacterActionResult.failure('Tên nhân vật không được để trống.');
+    }
+
+    final url = Uri.parse(AppConfig.updateCharacterNameUrl(characterId));
+    try {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final body = jsonEncode({'name': trimmedName});
+
+      final response = await _client.put(url, headers: headers, body: body).timeout(
+            const Duration(seconds: 15),
+          );
+
+      if (kDebugMode) {
+        debugPrint('[CharacterService] PUT $url -> ${response.statusCode}');
+        debugPrint('[CharacterService] Response body: ${response.body}');
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        String msg = 'Cập nhật tên nhân vật thành công!';
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map && decoded['message'] != null) {
+            msg = decoded['message'].toString();
+          }
+        } catch (_) {}
+        return CharacterActionResult.success(msg);
+      }
+
+      String errMsg = 'Lỗi cập nhật tên nhân vật (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['message'] != null) {
+          errMsg = decoded['message'].toString();
+        }
+      } catch (_) {}
+      return CharacterActionResult.failure(errMsg);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CharacterService] Exception updateCharacterName: $e');
+      }
+      return CharacterActionResult.failure('Lỗi kết nối khi cập nhật tên: $e');
+    }
+  }
+
+  /// 8. Lấy danh sách nhân vật chờ duyệt dành cho Phụ huynh
+  /// GET /api/characters/pending-approval
+  static Future<List<KidCharacter>> fetchPendingCharactersForParent({
+    String? token,
+  }) async {
+    final url = Uri.parse(AppConfig.charactersPendingApprovalUrl);
+    try {
+      final headers = <String, String>{
+        'Accept': 'application/json',
+      };
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final response = await _client.get(url, headers: headers).timeout(
+            const Duration(seconds: 15),
+          );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          return decoded
+              .whereType<Map<String, dynamic>>()
+              .map((j) => KidCharacter.fromJson(j))
+              .toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CharacterService] Exception fetchPendingCharactersForParent: $e');
+      }
+      return [];
     }
   }
 }

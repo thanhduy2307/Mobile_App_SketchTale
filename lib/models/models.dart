@@ -108,20 +108,51 @@ class KidCharacter {
   }
 
   factory KidCharacter.fromJson(Map<String, dynamic> json) {
+    final statusVal = json['status'];
+    final bool isApproved = statusVal == 2 ||
+        statusVal == 'Approved' ||
+        statusVal == 'approved' ||
+        json['isParentApproved'] == true;
+
+    final charId = json['characterId']?.toString() ??
+        json['id']?.toString() ??
+        '';
+    final charName = json['characterName']?.toString() ??
+        json['name']?.toString() ??
+        'Bạn 3D';
+    final pronoun = json['defaultPronoun']?.toString() ?? '';
+    final prompt = json['aiPromptUsed']?.toString() ??
+        json['description']?.toString() ??
+        '';
+    final rawAvatar = json['finalImageUrl']?.toString() ??
+        json['avatar3dUrl']?.toString() ??
+        '';
+    final rawDrawing = json['originalDrawingUrl']?.toString() ??
+        json['drawingUrl']?.toString() ??
+        '';
+    final avatar3dUrl = AppConfig.resolveImageUrl(rawAvatar);
+    final drawingUrl = AppConfig.resolveImageUrl(rawDrawing);
+
     return KidCharacter(
-      id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? 'Bạn 3D',
-      title: json['title']?.toString() ?? 'Nhân vật của bé',
-      description: json['description']?.toString() ?? '',
-      drawingUrl: json['drawingUrl']?.toString() ?? '',
-      avatar3dUrl: json['avatar3dUrl']?.toString() ?? '',
-      isParentApproved: json['isParentApproved'] == true,
-      voicePhrase: json['voicePhrase']?.toString() ?? '',
+      id: charId,
+      name: charName,
+      title: pronoun.isNotEmpty
+          ? pronoun
+          : (json['title']?.toString() ?? 'Nhân vật sáng tạo của bé'),
+      description: prompt,
+      drawingUrl: drawingUrl,
+      avatar3dUrl: avatar3dUrl,
+      isParentApproved: isApproved,
+      voicePhrase: json['voicePhrase']?.toString() ??
+          'Chào bé yêu, tớ là bạn $charName!',
       themeColor: json['themeColor'] != null
           ? Color((json['themeColor'] as num).toInt())
           : const Color(0xFFF59E0B),
-      assignedRole: json['assignedRole']?.toString(),
-      personality: json['personality']?.toString() ?? 'Dũng Sĩ',
+      assignedRole: json['assignedRole']?.toString() ??
+          (pronoun.isNotEmpty ? pronoun : null),
+      personality: pronoun.isNotEmpty
+          ? pronoun
+          : (json['personality']?.toString() ?? 'Dũng Sĩ'),
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
