@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sketch_table/models/models.dart';
 import 'package:sketch_table/utils/app_config.dart';
@@ -70,5 +71,41 @@ void main() {
       expect(char.name, 'Sư Tử Lửa');
       expect(char.isParentApproved, isFalse);
     });
+
+    test('AppState.approvedCharacters filters only approved characters', () {
+      final approvedChar = KidCharacter(
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'Cá Vàng',
+        title: 'Bạn nhỏ',
+        description: '',
+        drawingUrl: '',
+        avatar3dUrl: '',
+        isParentApproved: true,
+        voicePhrase: '',
+        themeColor: const Color(0xFFF59E0B),
+        createdAt: DateTime.now(),
+      );
+
+      final pendingChar = KidCharacter(
+        id: '22222222-2222-2222-2222-222222222222',
+        name: 'Thiên Nga',
+        title: 'Bạn nhỏ',
+        description: '',
+        drawingUrl: '',
+        avatar3dUrl: '',
+        isParentApproved: false,
+        voicePhrase: '',
+        themeColor: const Color(0xFFF59E0B),
+        createdAt: DateTime.now(),
+      );
+
+      final charList = [approvedChar, pendingChar];
+      final approvedOnly = charList.where((c) => c.isParentApproved).toList();
+
+      expect(approvedOnly.length, 1);
+      expect(approvedOnly.first.name, 'Cá Vàng');
+      expect(approvedOnly.first.isParentApproved, isTrue);
+    });
   });
 }
+

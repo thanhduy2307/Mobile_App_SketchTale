@@ -5,7 +5,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
 import '../role_assignment_styles.dart';
 
-/// 🎨 Tủ nhân vật của bé để chọn gán vai
+/// Tu nhan vat cua be de chon gan vai (chi hien thi nhan vat da duoc Ba Me duyet)
 class RoleCharacterShelf extends StatelessWidget {
   final AppState state;
   final bool isTablet;
@@ -110,7 +110,7 @@ class RoleCharacterShelf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final characters = state.characters;
+    final characters = state.approvedCharacters;
 
     if (characters.isEmpty) {
       return Container(
@@ -121,7 +121,9 @@ class RoleCharacterShelf extends StatelessWidget {
         ),
         child: Center(
           child: Text(
-            'Bé chưa có nhân vật nào! Hãy vẽ bạn mới ở xưởng vẽ nhé.',
+            state.characters.isEmpty
+                ? 'Bé chưa có nhân vật nào! Hãy vẽ bạn mới ở xưởng vẽ nhé.'
+                : 'Chưa có nhân vật nào được Ba Mẹ duyệt để vào truyện. Bé hãy nhờ Ba Mẹ duyệt nhân vật ở Tủ Đồ nhé!',
             style: AppTypography.bodyMd(color: AppColors.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),

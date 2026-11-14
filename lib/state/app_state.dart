@@ -106,6 +106,10 @@ class AppState extends ChangeNotifier {
   // List of kid's characters
   List<KidCharacter> characters = [];
 
+  /// Danh sách các nhân vật đã được Ba Mẹ phê duyệt
+  List<KidCharacter> get approvedCharacters =>
+      characters.where((c) => c.isParentApproved).toList();
+
   // List of all interactive stories
   List<Story> stories = [];
 
@@ -814,11 +818,13 @@ class AppState extends ChangeNotifier {
   }
 
   void assignHeroCharacter(KidCharacter? character) {
+    if (character != null && !character.isParentApproved) return;
     heroCharacter = character;
     notifyListeners();
   }
 
   void assignCompanionCharacter(KidCharacter? character) {
+    if (character != null && !character.isParentApproved) return;
     companionCharacter = character;
     notifyListeners();
   }

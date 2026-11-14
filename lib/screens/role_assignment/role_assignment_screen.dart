@@ -153,7 +153,7 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
                           borderRadius: BorderRadius.circular(9999),
                         ),
                         child: Text(
-                          '${state.characters.length} bạn',
+                          '${state.approvedCharacters.length} bạn',
                           style: AppTypography.labelSm(color: AppColors.primary),
                         ),
                       ),
