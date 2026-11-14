@@ -569,22 +569,66 @@ class StoryPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  KidCharacter? resolveMappedKidCharacter(String? roleId) {
-    final fromState = appState.getMappedCharacterForRole(
-      story.id,
-      roleId,
-    );
-    if (fromState != null && fromState.isParentApproved) return fromState;
+  KidCharacter? resolveMappedKidCharacter({
+    String? roleId,
+    StoryRoleTemplate? matchedRole,
+    int slotIndex = 0,
+  }) {
+    // 1. Kiem tra mapping theo roleId truc tiep tu appState
+    if (roleId != null && roleId.isNotEmpty) {
+      final fromState = appState.getMappedCharacterForRole(story.id, roleId);
+      if (fromState != null && fromState.isParentApproved) return fromState;
+    }
 
-    if (roleId == null || roleId.isEmpty) return null;
-    for (final m in storyMappings) {
-      if (m.isApproved &&
-          m.storyRoleTemplateId.toLowerCase() == roleId.toLowerCase()) {
-        for (final c in appState.characters) {
-          if (c.id == m.characterId && c.isParentApproved) return c;
+    // 2. Kiem tra mapping theo matchedRole.id tu appState
+    if (matchedRole != null && matchedRole.id.isNotEmpty && matchedRole.id != roleId) {
+      final fromMatched = appState.getMappedCharacterForRole(story.id, matchedRole.id);
+      if (fromMatched != null && fromMatched.isParentApproved) return fromMatched;
+    }
+
+    // 3. Kiem tra storyMappings tu API may chu neu co
+    final effectiveRoleId = (roleId != null && roleId.isNotEmpty) ? roleId : matchedRole?.id;
+    if (effectiveRoleId != null && effectiveRoleId.isNotEmpty) {
+      for (final m in storyMappings) {
+        if (m.isApproved &&
+            m.storyRoleTemplateId.toLowerCase() == effectiveRoleId.toLowerCase()) {
+          for (final c in appState.characters) {
+            if (c.id == m.characterId && c.isParentApproved) return c;
+          }
         }
       }
     }
+
+    // 4. Khop theo loai vai dien tu StoryRoleTemplate:
+    // Vai chinh (mainCharacter) -> Dung heroCharacter neu da duyet
+    if (matchedRole?.storyRoleType == StoryRoleType.mainCharacter &&
+        appState.heroCharacter != null &&
+        appState.heroCharacter!.isParentApproved) {
+      return appState.heroCharacter;
+    }
+
+    // Vai ban di cung (companion) -> Dung companionCharacter neu da duyet
+    if (matchedRole?.storyRoleType == StoryRoleType.companion &&
+        appState.companionCharacter != null &&
+        appState.companionCharacter!.isParentApproved) {
+      return appState.companionCharacter;
+    }
+
+    // 5. Khop theo thu tu Slot xuat hien tren san khau:
+    // Slot 0 (nhan vat dau tien tren san khau) -> Uu tien gan Ban Chinh (heroCharacter)
+    if (slotIndex == 0 &&
+        appState.heroCharacter != null &&
+        appState.heroCharacter!.isParentApproved) {
+      return appState.heroCharacter;
+    }
+
+    // Slot 1 (nhan vat thu 2) -> Uu tien gan Ban Di Cung (companionCharacter)
+    if (slotIndex == 1 &&
+        appState.companionCharacter != null &&
+        appState.companionCharacter!.isParentApproved) {
+      return appState.companionCharacter;
+    }
+
     return null;
   }
 
@@ -625,9 +669,15 @@ class StoryPlayerController extends ChangeNotifier {
           }
         }
       }
-      matchedRole ??= storyRoles.isNotEmpty ? storyRoles.first : null;
+      matchedRole ??= (slotIndex < storyRoles.length)
+          ? storyRoles[slotIndex]
+          : (storyRoles.isNotEmpty ? storyRoles.first : null);
 
-      final activeKidChar = resolveMappedKidCharacter(rawSlot.storyRoleTemplateId);
+      final activeKidChar = resolveMappedKidCharacter(
+        roleId: rawSlot.storyRoleTemplateId,
+        matchedRole: matchedRole,
+        slotIndex: slotIndex,
+      );
       final displayName = activeKidChar?.name ?? matchedRole?.roleName ?? 'Nhân vật';
       final fallbackAsset = _localFallbackAssetForRole(
         matchedRole?.roleName ?? displayName,
@@ -635,8 +685,8 @@ class StoryPlayerController extends ChangeNotifier {
       );
 
       String primaryUrl = '';
-      if (activeKidChar != null && activeKidChar.avatar3dUrl.isNotEmpty) {
-        primaryUrl = activeKidChar.avatar3dUrl;
+      if (activeKidChar != null && activeKidChar.avatarAsset.isNotEmpty) {
+        primaryUrl = activeKidChar.avatarAsset;
       } else if (effectiveSlot.fullAssetUrl.isNotEmpty) {
         primaryUrl = effectiveSlot.fullAssetUrl;
       } else if (matchedRole != null && matchedRole.fullDefaultAssetUrl.isNotEmpty) {

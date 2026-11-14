@@ -196,9 +196,9 @@ class StoryCanvasView extends StatelessWidget {
                                   : null,
                             )
                         else if (heroCharacter != null &&
-                            heroCharacter!.avatar3dUrl.isNotEmpty)
+                            heroCharacter!.avatarAsset.isNotEmpty)
                           SquashStretchCharacter(
-                            imagePath: heroCharacter!.avatar3dUrl,
+                            imagePath: heroCharacter!.avatarAsset,
                             characterName: badgeCharacterName,
                             initialPhrase:
                                 characterSpeech ??
@@ -368,7 +368,7 @@ class StoryCanvasView extends StatelessWidget {
                                       ],
                                       if (sortedSlots.isNotEmpty ||
                                           (heroCharacter != null &&
-                                              heroCharacter!.avatar3dUrl.isNotEmpty))
+                                              heroCharacter!.avatarAsset.isNotEmpty))
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 10,
@@ -408,7 +408,7 @@ class StoryCanvasView extends StatelessWidget {
                         // 6. Discreet hint pill at bottom (chỉ hiện khi có nhân vật)
                         if (sortedSlots.isNotEmpty ||
                             (heroCharacter != null &&
-                                heroCharacter!.avatar3dUrl.isNotEmpty))
+                                heroCharacter!.avatarAsset.isNotEmpty))
                           Positioned(
                             bottom: 8,
                             left: 12,

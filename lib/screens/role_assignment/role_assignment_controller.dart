@@ -5,7 +5,7 @@ import '../../state/app_state.dart';
 import '../story_player/story_player_screen.dart';
 import 'dialogs/role_unapproved_warning_dialog.dart';
 
-/// 🧠 Controller Quản Lý Gán Vai Trong Truyện (RoleAssignmentController)
+/// Controller Quan Ly Gan Vai Trong Truyen (RoleAssignmentController)
 class RoleAssignmentController extends ChangeNotifier {
   int targetSlot = 1; // 1: Hero, 2: Companion
   List<StoryRoleTemplate> storyRoles = [];
@@ -33,13 +33,21 @@ class RoleAssignmentController extends ChangeNotifier {
     }
   }
 
-  StoryRoleTemplate? get heroRole => storyRoles
-      .cast<StoryRoleTemplate?>()
-      .firstWhere((r) => r?.storyRoleType == StoryRoleType.mainCharacter, orElse: () => null);
+  StoryRoleTemplate? get heroRole {
+    if (storyRoles.isEmpty) return null;
+    final found = storyRoles
+        .cast<StoryRoleTemplate?>()
+        .firstWhere((r) => r?.storyRoleType == StoryRoleType.mainCharacter, orElse: () => null);
+    return found ?? storyRoles.first;
+  }
 
-  StoryRoleTemplate? get companionRole => storyRoles
-      .cast<StoryRoleTemplate?>()
-      .firstWhere((r) => r?.storyRoleType == StoryRoleType.companion, orElse: () => null);
+  StoryRoleTemplate? get companionRole {
+    if (storyRoles.length < 2) return null;
+    final found = storyRoles
+        .cast<StoryRoleTemplate?>()
+        .firstWhere((r) => r?.storyRoleType == StoryRoleType.companion, orElse: () => null);
+    return found ?? storyRoles[1];
+  }
 
   void assignCharacterToTargetSlot({
     required BuildContext context,

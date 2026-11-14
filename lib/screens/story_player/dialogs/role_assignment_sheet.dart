@@ -55,27 +55,38 @@ class RoleAssignmentSheet extends StatefulWidget {
 }
 
 class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
-  KidCharacter? _resolveMappedKidCharacter(String? roleId) {
+  KidCharacter? _resolveMappedKidCharacter(StoryRoleTemplate role) {
     final fromState = widget.appState.getMappedCharacterForRole(
       widget.story.id,
-      roleId,
+      role.id,
     );
     if (fromState != null && fromState.isParentApproved) return fromState;
 
-    if (roleId == null || roleId.isEmpty) return null;
     for (final m in widget.storyMappings) {
       if (m.isApproved &&
-          m.storyRoleTemplateId.toLowerCase() == roleId.toLowerCase()) {
+          m.storyRoleTemplateId.toLowerCase() == role.id.toLowerCase()) {
         for (final c in widget.appState.characters) {
           if (c.id == m.characterId && c.isParentApproved) return c;
         }
       }
     }
+
+    if (role.storyRoleType == StoryRoleType.mainCharacter &&
+        widget.appState.heroCharacter != null &&
+        widget.appState.heroCharacter!.isParentApproved) {
+      return widget.appState.heroCharacter;
+    }
+    if (role.storyRoleType == StoryRoleType.companion &&
+        widget.appState.companionCharacter != null &&
+        widget.appState.companionCharacter!.isParentApproved) {
+      return widget.appState.companionCharacter;
+    }
+
     return null;
   }
 
   Widget _buildRoleAssignmentItem(StoryRoleTemplate role) {
-    final mappedChar = _resolveMappedKidCharacter(role.id);
+    final mappedChar = _resolveMappedKidCharacter(role);
     final isRoleMapped = mappedChar != null;
 
     return Container(
@@ -110,6 +121,11 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
                 TextButton.icon(
                   onPressed: () {
                     widget.appState.clearRoleMapping(widget.story.id, role.id);
+                    if (role.storyRoleType == StoryRoleType.mainCharacter) {
+                      widget.appState.assignHeroCharacter(null);
+                    } else if (role.storyRoleType == StoryRoleType.companion) {
+                      widget.appState.assignCompanionCharacter(null);
+                    }
                     setState(() {});
                     widget.onRolesChanged();
                     widget.onShowToast(
@@ -141,11 +157,11 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
           const SizedBox(height: 10),
 
           // Danh sách bạn nhỏ của bé
-          if (widget.appState.characters.isEmpty)
+          if (widget.appState.approvedCharacters.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                'Bé chưa có bạn nhỏ nào trong bộ sưu tập. Bé có thể vẽ bạn mới ở màn hình Sáng tạo nhé.',
+                'Chưa có nhân vật nào được Ba Mẹ duyệt. Bé hãy nhờ Ba Mẹ duyệt nhân vật ở Tủ Đồ nhé.',
                 style: TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant),
               ),
             )
@@ -160,10 +176,10 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                itemCount: widget.appState.characters.length,
+                itemCount: widget.appState.approvedCharacters.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, idx) {
-                  final char = widget.appState.characters[idx];
+                  final char = widget.appState.approvedCharacters[idx];
                   final isAssignedHere = mappedChar?.id == char.id;
                   final isApproved = char.isParentApproved;
 
@@ -204,6 +220,11 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
                         storyRoleTemplateId: role.id,
                         characterId: char.id,
                       );
+                      if (role.storyRoleType == StoryRoleType.mainCharacter) {
+                        widget.appState.assignHeroCharacter(char);
+                      } else if (role.storyRoleType == StoryRoleType.companion) {
+                        widget.appState.assignCompanionCharacter(char);
+                      }
                       setState(() {});
                       widget.onRolesChanged();
                       widget.onShowToast(

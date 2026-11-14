@@ -1179,19 +1179,35 @@ class AppState extends ChangeNotifier {
     required String storyRoleTemplateId,
     required String characterId,
   }) async {
-    final result = await CharacterMappingService.assignCharacterToRole(
+    final key =
+        '${storyId.toLowerCase().trim()}:${storyRoleTemplateId.toLowerCase().trim()}';
+    // 1. Luu ngay mapping cuc bo vao bo nho de StoryPlayer hien thi tuc thi
+    final localMapping = UserStoryCharacterMapping(
+      id: 'local_${DateTime.now().millisecondsSinceEpoch}',
       generatedStoryId: storyId,
       storyRoleTemplateId: storyRoleTemplateId,
       characterId: characterId,
-      token: authToken,
+      parentApprovalStatus: ParentApprovalStatus.approved,
     );
-    if (result != null) {
-      final key =
-          '${storyId.toLowerCase().trim()}:${storyRoleTemplateId.toLowerCase().trim()}';
-      storyRoleMappings[key] = result;
-    }
+    storyRoleMappings[key] = localMapping;
     notifyListeners();
-    return result;
+
+    // 2. Gui dong bo len Backend (neu co loi cung giu lai mapping cuc bo)
+    try {
+      final result = await CharacterMappingService.assignCharacterToRole(
+        generatedStoryId: storyId,
+        storyRoleTemplateId: storyRoleTemplateId,
+        characterId: characterId,
+        token: authToken,
+      );
+      if (result != null) {
+        storyRoleMappings[key] = result;
+        notifyListeners();
+      }
+      return result ?? localMapping;
+    } catch (_) {
+      return localMapping;
+    }
   }
 
   /// Resolves a custom `KidCharacter` ONLY if the child explicitly assigned one to `(storyId, roleId)`.
