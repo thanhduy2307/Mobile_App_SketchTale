@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../home_styles.dart';
 
-/// 💡 Thẻ Mẹo Gia Đình: 10 Phút Bên Nhau
+///  Thẻ Mẹo Gia Đình: 10 Phút Bên Nhau
 class HomeDailyTipCard extends StatelessWidget {
   const HomeDailyTipCard({super.key});
 

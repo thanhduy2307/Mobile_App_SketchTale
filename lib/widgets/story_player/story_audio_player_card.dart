@@ -128,29 +128,16 @@ class _StoryAudioPlayerCardState extends State<StoryAudioPlayerCard>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.isPlaying ? 'ĐANG PHÁT LỜI KỂ' : 'NGHE GIỌNG ĐỌC KỲ DIỆU',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: widget.isPlaying
-                              ? const Color(0xFF0369A1)
-                              : AppColors.onSurfaceVariant,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                      Text(
-                        widget.narratorName,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    widget.isPlaying ? 'ĐANG PHÁT LỜI KỂ' : 'NGHE GIỌNG ĐỌC KỲ DIỆU',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: widget.isPlaying
+                          ? const Color(0xFF0369A1)
+                          : AppColors.onSurfaceVariant,
+                      letterSpacing: 0.4,
+                    ),
                   ),
                 ],
               ),
@@ -251,7 +238,7 @@ class _StoryAudioPlayerCardState extends State<StoryAudioPlayerCard>
                       Icon(Icons.replay_5_rounded, size: 20, color: Color(0xFF0284C7)),
                       SizedBox(width: 4),
                       Text(
-                        'Lùi 5s',
+                        '5s',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,

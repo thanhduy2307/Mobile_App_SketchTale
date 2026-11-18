@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 /// Result wrapper for Character operations
 class CharacterActionResult {
@@ -30,7 +31,7 @@ class CharacterActionResult {
 /// 4. PUT /api/characters/{id}/approve (Parent: Pending -> Approved)
 /// 5. PUT /api/characters/{id}/reject (Parent: Pending -> Rejected)
 class CharacterService {
-  static final http.Client _client = http.Client();
+  static final http.Client _client = ApiClient.instance;
 
   /// Gửi nhân vật xem trước (Preview) lên cho Phụ huynh phê duyệt (Pending)
   static Future<CharacterActionResult> acceptCharacterPreview({

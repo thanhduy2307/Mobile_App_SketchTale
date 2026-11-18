@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'screens/collection/collection_screen.dart';
 import 'screens/drawing/drawing_screen.dart';
+import 'screens/gender_selection/gender_selection_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/library/library_screen.dart';
 import 'screens/login/login_screen.dart';
@@ -11,6 +12,7 @@ import 'theme/app_theme.dart';
 import 'utils/app_config.dart';
 import 'utils/responsive.dart';
 import 'widgets/app_loading.dart';
+import 'widgets/app_screen_background.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,6 +71,14 @@ class _SketchTaleAppState extends State<SketchTaleApp> {
             return LoginScreen(
               appState: _appState,
               onLoginSuccess: () {},
+            );
+          }
+          if (!_appState.hasSelectedGenderTheme) {
+            return GenderSelectionScreen(
+              appState: _appState,
+              onThemeSelected: (theme) {
+                _appState.selectGenderTheme(theme);
+              },
             );
           }
           return MainShellScreen(appState: _appState);
@@ -193,6 +203,29 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+              Squishy3DButton.primary(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  widget.appState.resetGenderTheme();
+                },
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: AppColors.onPrimary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Đổi Không Gian Bé Trai / Bé Gái',
+                      style: AppTypography.labelMd(color: AppColors.onPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
               Squishy3DButton.quiet(
                 onPressed: () {
                   Navigator.of(ctx).pop();
@@ -244,24 +277,25 @@ class _MainShellScreenState extends State<MainShellScreen> {
   Widget build(BuildContext context) {
     final state = widget.appState;
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(72),
-        child: SafeArea(
-          bottom: false,
-          child: Container(
-            height: 72,
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.92),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryContainer.withValues(alpha: 0.08),
-                  offset: const Offset(0, 4),
-                  blurRadius: 18,
-                ),
-              ],
-            ),
+    return AppScreenBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(62),
+          child: SafeArea(
+            bottom: false,
+            child: Container(
+              height: 62,
+              decoration: BoxDecoration(
+                color: AppColors.surface.withValues(alpha: 0.88),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryContainer.withValues(alpha: 0.08),
+                    offset: const Offset(0, 4),
+                    blurRadius: 18,
+                  ),
+                ],
+              ),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
@@ -408,9 +442,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          height: 80,
+          height: 68,
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLowest,
+            color: AppColors.surfaceContainerLowest.withValues(alpha: 0.92),
             border: const Border(
               top: BorderSide(color: AppColors.outline, width: 1.5),
             ),
@@ -465,7 +499,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildBottomNavItem({

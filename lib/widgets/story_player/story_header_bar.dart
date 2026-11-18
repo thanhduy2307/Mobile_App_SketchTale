@@ -205,25 +205,8 @@ class StoryHeaderBar extends StatelessWidget {
                 const SizedBox(width: 6),
               ],
 
-              // Nút Báo cáo an toàn nội dung (Shield)
-              GestureDetector(
-                onTap: onReportTap,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFFECEB),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0xFFFFD5D2),
-                        offset: Offset(0, 2),
-                        blurRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.shield_rounded, color: AppColors.error, size: 16),
-                ),
-              ),
+              if (!showRolesButton && !showLanguageSwitch)
+                const SizedBox(width: 72),
             ],
           ),
         ],

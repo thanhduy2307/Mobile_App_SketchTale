@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/responsive.dart';
 import '../../widgets/app_loading.dart';
 import 'components/login_form_card.dart';
 import 'components/login_header_brand.dart';
@@ -12,8 +14,8 @@ import 'login_controller.dart';
 export 'login_controller.dart';
 export 'login_styles.dart';
 
-/// 🔐 Màn hình Đăng Nhập Của Bé (LoginScreen)
-/// Đã tái cấu trúc theo mô hình Component hóa siêu tinh gọn:
+/// Man hinh Dang Nhap Cua Be (LoginScreen)
+/// Da tai cau truc theo mo hinh Component hoa tinh gon:
 /// - Controller: [LoginController]
 /// - Stylesheet: [LoginStyles]
 /// - Components: [LoginHeaderBrand], [LoginFormCard], [LoginSecurityNote]
@@ -91,45 +93,94 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
+    final outerPadding = Responsive.value<EdgeInsets>(
+      context,
+      mobile: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      tablet: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      desktop: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+    );
+    final formMaxWidth = Responsive.value<double>(
+      context,
+      mobile: 390.0,
+      tablet: 450.0,
+      desktop: 470.0,
+    );
+    final verticalSpacing = Responsive.value<double>(
+      context,
+      mobile: 16.0,
+      tablet: 22.0,
+    );
+    final bgImagePath = isMobile
+        ? 'assets/images/login-bg-mobile.png'
+        : 'assets/images/login-bg.png';
+
     return Scaffold(
       backgroundColor: AppColors.surface,
-      body: AppLoadingOverlay(
-        isLoading: _controller.isLoading,
-        label: 'Đang mở cổng kỳ diệu...',
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 10),
-
-                // 1. Logo & Thương hiệu
-                const LoginHeaderBrand(),
-
-                const SizedBox(height: 20),
-
-                // 2. Form nhập & Nút vào thế giới kỳ diệu
-                LoginFormCard(
-                  nameController: _controller.nameController,
-                  passwordController: _controller.passwordController,
-                  obscurePassword: _controller.obscurePassword,
-                  isLoading: _controller.isLoading,
-                  onToggleObscure: _controller.toggleObscurePassword,
-                  onSubmit: _handleLogin,
-                ),
-
-                const SizedBox(height: 16),
-
-                // 4. Ghi chú bảo mật an toàn cho bé
-                const LoginSecurityNote(),
-
-                const SizedBox(height: 24),
-              ],
+      resizeToAvoidBottomInset: true,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Anh nen trang dang nhap: Tu dong chon anh doc cho Dien thoai hoac anh ngang cho iPad
+          Positioned.fill(
+            child: Image.asset(
+              bgImagePath,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Image.asset(
+                'assets/images/login-bg.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
             ),
           ),
-        ),
+
+          // 2. Noi dung Dang nhap can giua linh hoat
+          AppLoadingOverlay(
+            isLoading: _controller.isLoading,
+            label: 'Đang mở cổng kỳ diệu...',
+            child: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, viewportConstraints) {
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: outerPadding,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: (viewportConstraints.maxHeight - (isMobile ? 28 : 48))
+                            .clamp(0.0, double.infinity),
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: formMaxWidth),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // 1. Logo & Thuong hieu (Tu dong co gian theo man hinh)
+                              const LoginHeaderBrand(),
+
+                              SizedBox(height: verticalSpacing),
+
+                              // 2. Form nhap & Nut vao the gioi ky dieu
+                              LoginFormCard(
+                                nameController: _controller.nameController,
+                                passwordController: _controller.passwordController,
+                                obscurePassword: _controller.obscurePassword,
+                                isLoading: _controller.isLoading,
+                                onToggleObscure: _controller.toggleObscurePassword,
+                                onSubmit: _handleLogin,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

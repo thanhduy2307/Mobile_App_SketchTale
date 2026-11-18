@@ -4,11 +4,11 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
 import '../home_styles.dart';
 
-/// 📖 Thẻ Hero Đọc Tiếp Nè (Quick-Play 1 chạm cho bé)
+///  Thẻ Hero Đọc Tiếp Nè (Quick-Play 1 chạm cho bé)
 /// Hiển thị linh hoạt 3 trạng thái:
-/// 1. Đã hoàn thành: "BÉ ĐÃ ĐỌC XONG 🎉" -> "ĐỌC LẠI TRUYỆN 🔄"
-/// 2. Đang đọc dở: "BÉ ĐỌC TIẾP NHÉ 📖" -> "VÀO ĐỌC TIẾP NGAY ▶"
-/// 3. Truyện mới: "GỢI Ý HÔM NAY ✨" -> "BẮT ĐẦU ĐỌC TRUYỆN 📚"
+/// 1. Đã hoàn thành: "BÉ ĐÃ ĐỌC XONG " -> "ĐỌC LẠI TRUYỆN "
+/// 2. Đang đọc dở: "BÉ ĐỌC TIẾP NHÉ " -> "VÀO ĐỌC TIẾP NGAY ▶"
+/// 3. Truyện mới: "GỢI Ý HÔM NAY ✨" -> "BẮT ĐẦU ĐỌC TRUYỆN "
 class HomeHeroStoryCard extends StatelessWidget {
   final Story story;
   final VoidCallback onTap;

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../models/models.dart';
 import '../../../state/app_state.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/app_loading.dart';
+import '../../../widgets/character_cutout_image.dart';
 import '../role_assignment_controller.dart';
 import '../role_assignment_styles.dart';
 
@@ -42,26 +42,18 @@ class RoleCharacterShelf extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
-              child: character.avatar3dUrl.startsWith('assets/')
-                  ? Image.asset(
-                      character.avatar3dUrl,
-                      width: 58,
-                      height: 58,
-                      fit: BoxFit.contain,
-                    )
-                  : Image.network(
-                      character.avatar3dUrl,
-                      width: 58,
-                      height: 58,
-                      fit: BoxFit.cover,
-                      loadingBuilder: appImageLoadingBuilder,
-                      errorBuilder: (_, _, _) => Container(
-                        width: 58,
-                        height: 58,
-                        color: AppColors.primaryContainer,
-                        child: const Icon(Icons.cruelty_free_rounded, color: Colors.white),
-                      ),
-                    ),
+              child: CharacterCutoutImage(
+                imageUrl: character.avatar3dUrl,
+                width: 58,
+                height: 58,
+                fit: BoxFit.contain,
+                errorFallbackBuilder: () => Container(
+                  width: 58,
+                  height: 58,
+                  color: AppColors.primaryContainer,
+                  child: const Icon(Icons.cruelty_free_rounded, color: Colors.white),
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/models.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
@@ -68,7 +69,10 @@ class StoryCard extends StatelessWidget {
                   bottom: 8,
                   left: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.surface.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(999),
@@ -77,11 +81,17 @@ class StoryCard extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer_outlined, size: 12, color: AppColors.secondary),
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 12,
+                          color: AppColors.secondary,
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           '$durationMinutes phút',
-                          style: AppTypography.labelSm(color: AppColors.onSurface),
+                          style: AppTypography.labelSm(
+                            color: AppColors.onSurface,
+                          ),
                         ),
                       ],
                     ),
@@ -93,7 +103,10 @@ class StoryCard extends StatelessWidget {
                   bottom: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.surface.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(999),
@@ -116,7 +129,10 @@ class StoryCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: themeColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: themeColor.withValues(alpha: 0.4), width: 0.8),
+                border: Border.all(
+                  color: themeColor.withValues(alpha: 0.4),
+                  width: 0.8,
+                ),
               ),
               child: Text(
                 themeName,
@@ -135,9 +151,8 @@ class StoryCard extends StatelessWidget {
             // 3. Tên Truyện (Title)
             Text(
               template.title,
-              style: AppTypography.headlineSm(color: AppColors.onSurface).copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: AppTypography.headlineSm(color: AppColors.onSurface)
+                  .copyWith(fontWeight: FontWeight.w800),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -171,7 +186,7 @@ class StoryCard extends StatelessWidget {
                   ),
                   SizedBox(width: 6),
                   Text(
-                    'Đọc Ngay',
+                    'Đọc Truyện',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
@@ -187,4 +202,3 @@ class StoryCard extends StatelessWidget {
     );
   }
 }
-

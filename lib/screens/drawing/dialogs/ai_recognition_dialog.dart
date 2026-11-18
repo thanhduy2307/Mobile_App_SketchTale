@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../models/drawing_ai_models.dart';
 import '../../../models/models.dart';
 import '../../../theme/app_theme.dart';
-import '../drawing_styles.dart';
 
-/// 🎨 Dialog Giai đoạn 1: Bút thần nhận diện thành công nét vẽ của bé
-/// Cho bé xem các đặc điểm bút thần nhận ra, chọn bạn nhỏ gợi ý to rõ, sinh động và thêm phép thuật/ý tưởng.
+/// Dialog Giai doan 1: Meo Miu nhan dien thanh cong net ve cua be
+/// Cho be chon ban nho goi y to ro, sinh dong va them phep thuat/y tuong.
 class AiRecognitionDialog extends StatefulWidget {
   final AnalyzeDrawingResponse analyzeData;
   final List<CharType> fallbackCharTypes;
@@ -106,40 +105,6 @@ class _AiRecognitionDialogState extends State<AiRecognitionDialog> {
   Widget build(BuildContext context) {
     final suggested = widget.analyzeData.suggestedCharTypes;
 
-    // Bảng màu pastel xoay vòng cho các đặc điểm tags
-    final pastelColors = [
-      (
-        bg: const Color(0xFFFFFBEB),
-        border: const Color(0xFFFCD34D),
-        text: const Color(0xFFB45309),
-        icon: const Color(0xFFD97706),
-      ),
-      (
-        bg: const Color(0xFFF5F3FF),
-        border: const Color(0xFFDDD6FE),
-        text: const Color(0xFF6D28D9),
-        icon: const Color(0xFF7C3AED),
-      ),
-      (
-        bg: const Color(0xFFF0F9FF),
-        border: const Color(0xFFBAE6FD),
-        text: const Color(0xFF0369A1),
-        icon: const Color(0xFF0284C7),
-      ),
-      (
-        bg: const Color(0xFFF0FDF4),
-        border: const Color(0xFFBBF7D0),
-        text: const Color(0xFF15803D),
-        icon: const Color(0xFF16A34A),
-      ),
-      (
-        bg: const Color(0xFFFDF2F8),
-        border: const Color(0xFFFBCFE8),
-        text: const Color(0xFFBE185D),
-        icon: const Color(0xFFDB2777),
-      ),
-    ];
-
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -165,121 +130,7 @@ class _AiRecognitionDialogState extends State<AiRecognitionDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Banner Tiêu Đề Bút Thần Vui Nhộn & Nút Đóng
-              Row(
-                children: [
-                  const SizedBox(width: 32),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFFFCD34D), width: 1.5),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.auto_awesome_rounded,
-                            color: Color(0xFFD97706),
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Bút Thần Đã Nhận Ra Nhân Vật!',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF92400E),
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 22, color: AppColors.outline),
-                    onPressed: () => Navigator.of(context).pop(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    tooltip: 'Đóng',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-
-              // 2. Các đặc điểm nhận diện (Tags từ BE) - To rõ & Sinh động
-              if (widget.analyzeData.detectedTags.isNotEmpty) ...[
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.palette_rounded,
-                      size: 18,
-                      color: Color(0xFFD97706),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Nét vẽ nổi bật trong tranh của bé:',
-                      style: AppTypography.labelMd(
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: widget.analyzeData.detectedTags.asMap().entries.map((entry) {
-                    final idx = entry.key;
-                    final tag = entry.value;
-                    final style = pastelColors[idx % pastelColors.length];
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: style.bg,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: style.border, width: 1.2),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x06000000),
-                            offset: Offset(0, 2),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.circle,
-                            size: 6,
-                            color: style.icon,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            tag,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: style.text,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 18),
-              ],
-
-              // 3. Danh sách Loại Nhân Vật Gợi Ý - To bản, bắt mắt, dễ chạm
+              // 1. Tieu de chon ban nho & Nut Dong
               Row(
                 children: [
                   const Icon(
@@ -288,9 +139,18 @@ class _AiRecognitionDialogState extends State<AiRecognitionDialog> {
                     color: Color(0xFFD97706),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    'Bé muốn biến hình thành bạn nào?',
-                    style: AppTypography.headlineSm(color: AppColors.onSurface),
+                  Expanded(
+                    child: Text(
+                      'Bé muốn biến hình thành bạn nào?',
+                      style: AppTypography.headlineSm(color: AppColors.onSurface),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 22, color: AppColors.outline),
+                    onPressed: () => Navigator.of(context).pop(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Đóng',
                   ),
                 ],
               ),

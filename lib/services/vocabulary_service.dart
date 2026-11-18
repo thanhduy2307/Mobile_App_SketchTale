@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 /// Service implementing Swagger VocabularyTemplate endpoints:
 /// 1. GET  /api/story-pages/{pageId}/vocabularies
@@ -11,7 +12,7 @@ import '../utils/app_config.dart';
 /// 4. PUT  /api/story-vocabulary/{id}
 /// 5. DELETE /api/story-vocabulary/{id}
 class VocabularyService {
-  static final http.Client _client = http.Client();
+  static final http.Client _client = ApiClient.instance;
 
   /// 1. GET /api/story-pages/{pageId}/vocabularies
   /// Fetches all vocabulary items for a given story page
@@ -48,11 +49,15 @@ class VocabularyService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List && decoded.isNotEmpty) {
-          final list = decoded
-              .map((item) => VocabularyTemplate.fromJson(item as Map<String, dynamic>))
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null && list.isNotEmpty) {
+          final items = list
+              .whereType<Map>()
+              .map((item) => VocabularyTemplate.fromJson(Map<String, dynamic>.from(item)))
               .toList();
-          return list;
+          return items;
         }
       }
     } catch (e) {

@@ -3,7 +3,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../story_player/story_player_screen.dart';
 
-/// 🧠 Logic & Controller cho HomeScreen
+/// Logic & Controller cho HomeScreen
 /// Đảm nhiệm mở truyện (instant load + background fetch) và tính toán truyện đề xuất
 class HomeController {
   static bool _isOpeningStory = false;

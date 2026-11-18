@@ -56,12 +56,14 @@ class RoleAssignmentSheet extends StatefulWidget {
 
 class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
   KidCharacter? _resolveMappedKidCharacter(StoryRoleTemplate role) {
+    // 1. Kiem tra mapping theo roleId truc tiep tu appState cho dung vai nay
     final fromState = widget.appState.getMappedCharacterForRole(
       widget.story.id,
       role.id,
     );
     if (fromState != null && fromState.isParentApproved) return fromState;
 
+    // 2. Kiem tra mapping tu may chu cho dung vai nay
     for (final m in widget.storyMappings) {
       if (m.isApproved &&
           m.storyRoleTemplateId.toLowerCase() == role.id.toLowerCase()) {
@@ -71,23 +73,18 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
       }
     }
 
-    if (role.storyRoleType == StoryRoleType.mainCharacter &&
-        widget.appState.heroCharacter != null &&
-        widget.appState.heroCharacter!.isParentApproved) {
-      return widget.appState.heroCharacter;
-    }
-    if (role.storyRoleType == StoryRoleType.companion &&
-        widget.appState.companionCharacter != null &&
-        widget.appState.companionCharacter!.isParentApproved) {
-      return widget.appState.companionCharacter;
-    }
-
+    // Neu vai nay chua duoc gan rieng, tra ve null de he thong tu dong lay anh goc tu CM
     return null;
   }
 
   Widget _buildRoleAssignmentItem(StoryRoleTemplate role) {
     final mappedChar = _resolveMappedKidCharacter(role);
     final isRoleMapped = mappedChar != null;
+    final directlyMapped = widget.appState.getMappedCharacterForRole(
+      widget.story.id,
+      role.id,
+    );
+    final isDirectlyMapped = directlyMapped != null && directlyMapped.isParentApproved;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -147,7 +144,7 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
           Text(
             isRoleMapped
                 ? 'Bạn nhỏ đang đóng vai: ${mappedChar.name}'
-                : 'Đang dùng: Nhân vật nguyên bản của câu chuyện',
+                : 'Đang dùng: Mẫu nhân vật gốc từ Content Manager (CM)',
             style: TextStyle(
               fontSize: 12,
               fontWeight: isRoleMapped ? FontWeight.bold : FontWeight.normal,
@@ -212,6 +209,19 @@ class _RoleAssignmentSheetState extends State<RoleAssignmentSheet> {
                           ),
                         );
                         return;
+                      }
+
+                      // Neu ban nho nay da duoc gan cho vai khac trong truyen, go vai cu ve mac dinh CM
+                      for (final otherRole in widget.storyRoles) {
+                        if (otherRole.id != role.id) {
+                          final otherAssigned = widget.appState.getMappedCharacterForRole(
+                            widget.story.id,
+                            otherRole.id,
+                          );
+                          if (otherAssigned != null && otherAssigned.id == char.id) {
+                            widget.appState.clearRoleMapping(widget.story.id, otherRole.id);
+                          }
+                        }
                       }
 
                       // Gán vai

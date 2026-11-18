@@ -3,13 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 /// Service implementing Swagger StoryQuizTemplate endpoints for mobile:
 /// 1. GET /api/story-template/{storyId}/quizzes (List quizzes for child to play)
 /// 2. GET /api/story-quiz/{id} (Fetch single quiz detail)
 /// (Parent-only endpoints on Web: POST, PUT, DELETE)
 class QuizService {
-  static http.Client _client = http.Client();
+  static http.Client _client = ApiClient.instance;
 
   /// Lets tests inject a mock HTTP client.
   @visibleForTesting
@@ -24,7 +25,7 @@ class QuizService {
     return headers;
   }
 
-  /// POST /api/reading-logs/child-quiz-answers
+  /// POST /api/child-quiz-answers
   /// Child submits one answer; the backend grades it and returns progress + stars.
   /// Returns `null` when the answer could not be recorded.
   static Future<SubmitQuizAnswerResult?> submitAnswer({
@@ -35,14 +36,16 @@ class QuizService {
     String? childProfileId,
     String? token,
   }) async {
-    if (!AppConfig.isValidUuid(readingLogId) ||
-        !AppConfig.isValidUuid(storyQuizTemplateId)) {
-      return null;
-    }
+    final effectiveReadingLogId = AppConfig.isValidUuid(readingLogId)
+        ? readingLogId
+        : '00000000-0000-0000-0000-000000000000';
+    final effectiveQuizId = AppConfig.isValidUuid(storyQuizTemplateId)
+        ? storyQuizTemplateId
+        : '00000000-0000-0000-0000-000000000000';
 
     final body = <String, dynamic>{
-      'readingLogId': readingLogId,
-      'storyQuizTemplateId': storyQuizTemplateId,
+      'readingLogId': effectiveReadingLogId,
+      'storyQuizTemplateId': effectiveQuizId,
       'selectedOptionIndex': selectedOptionIndex,
       'responseTimeSeconds': responseTimeSeconds < 0 ? 0 : responseTimeSeconds,
     };
@@ -50,9 +53,11 @@ class QuizService {
       body['childProfileId'] = childProfileId;
     }
 
-    final url = Uri.parse(AppConfig.readingLogSubmitAnswerUrl);
+    final url = Uri.parse(AppConfig.childQuizAnswersUrl);
     try {
-      if (kDebugMode) debugPrint('[QuizService] POST $url');
+      if (kDebugMode) {
+        debugPrint('[QuizService] POST $url body: ${jsonEncode(body)}');
+      }
       final response = await _client
           .post(
             url,
@@ -62,7 +67,9 @@ class QuizService {
           .timeout(const Duration(seconds: 15));
 
       if (kDebugMode) {
-        debugPrint('[QuizService] Submit answer response: ${response.statusCode}');
+        debugPrint(
+          '[QuizService] Submit answer response: ${response.statusCode} - ${response.body}',
+        );
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -146,6 +153,22 @@ class QuizService {
       headers['Authorization'] = 'Bearer $token';
     }
 
+    List<StoryQuizTemplate> parseQuizzes(dynamic body) {
+      try {
+        final decoded = jsonDecode(body.toString());
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null && list.isNotEmpty) {
+          return list
+              .whereType<Map>()
+              .map((item) => StoryQuizTemplate.fromJson(Map<String, dynamic>.from(item)))
+              .toList();
+        }
+      } catch (_) {}
+      return const [];
+    }
+
     try {
       if (kDebugMode) {
         debugPrint('[QuizService] GET $url');
@@ -160,19 +183,29 @@ class QuizService {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          final list = decoded
-              .map((item) => StoryQuizTemplate.fromJson(item as Map<String, dynamic>))
-              .toList();
-          return list;
-        }
+        final quizzes = parseQuizzes(response.body);
+        if (quizzes.isNotEmpty) return quizzes;
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[QuizService] Error fetching quizzes for $storyId: $e');
       }
     }
+
+    // Fallback: GET /api/story-template/{storyId}/all-quizzes
+    final allQuizzesUrl = Uri.parse(AppConfig.storyAllQuizzesUrl(storyId));
+    try {
+      if (kDebugMode) {
+        debugPrint('[QuizService] GET $allQuizzesUrl (Fallback)');
+      }
+      final response = await _client.get(allQuizzesUrl, headers: headers).timeout(
+            const Duration(seconds: 10),
+          );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final quizzes = parseQuizzes(response.body);
+        if (quizzes.isNotEmpty) return quizzes;
+      }
+    } catch (_) {}
 
     return const [];
   }

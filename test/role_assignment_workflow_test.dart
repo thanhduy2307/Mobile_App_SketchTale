@@ -1,8 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sketch_table/models/models.dart';
 import 'package:sketch_table/screens/role_assignment/role_assignment_controller.dart';
 import 'package:sketch_table/state/app_state.dart';
+import 'package:sketch_table/widgets/character_cutout_image.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -125,6 +127,51 @@ void main() {
 
       expect(controller.getAssignedCharacterForRole(state, role1, 0), isNull);
       expect(controller.getAssignedCharacterForRole(state, role2, 1)?.name, 'Cao Vang');
+    });
+
+    test('CharacterCutoutImage removes solid background while preserving inner white features', () {
+      const width = 9;
+      const height = 9;
+      final rgba = Uint8List(width * height * 4);
+
+      void setPixel(int x, int y, int r, int g, int b, int a) {
+        final idx = (y * width + x) * 4;
+        rgba[idx] = r;
+        rgba[idx + 1] = g;
+        rgba[idx + 2] = b;
+        rgba[idx + 3] = a;
+      }
+
+      int getAlpha(int x, int y) => rgba[(y * width + x) * 4 + 3];
+
+      // 1. Toan bo nen trang (255, 255, 255, 255)
+      for (var y = 0; y < height; y++) {
+        for (var x = 0; x < width; x++) {
+          setPixel(x, y, 255, 255, 255, 255);
+        }
+      }
+
+      // 2. Ve than nhan vat mau do (220, 38, 38) tu (2..6, 2..6)
+      for (var y = 2; y <= 6; y++) {
+        for (var x = 2; x <= 6; x++) {
+          setPixel(x, y, 220, 38, 38, 255);
+        }
+      }
+
+      // 3. Dat 1 diem mau trang o tam (4, 4) dai dien cho long trang mat ben trong nhan vat
+      setPixel(4, 4, 255, 255, 255, 255);
+
+      final modified = CharacterCutoutImage.removeBackgroundFromRgba(rgba, width, height);
+      expect(modified, isTrue);
+
+      // Nen trang ben ngoai (0, 0) va (8, 8) phai bi xoa thanh trong suot (alpha = 0)
+      expect(getAlpha(0, 0), 0);
+      expect(getAlpha(8, 8), 0);
+      expect(getAlpha(1, 1), 0);
+
+      // Phan than nhan vat (3, 3) va con mat trang ben trong (4, 4) duoc bao toan alpha = 255
+      expect(getAlpha(3, 3), 255);
+      expect(getAlpha(4, 4), 255);
     });
   });
 }

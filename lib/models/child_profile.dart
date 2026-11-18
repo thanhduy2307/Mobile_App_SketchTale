@@ -41,11 +41,26 @@ class ChildProfile {
         : int.tryParse(json['remainingTimeLimit']?.toString() ?? '') ??
               dailyTime;
 
+    String resolveValidId() {
+      final candidates = [
+        json['id']?.toString(),
+        json['Id']?.toString(),
+        json['childProfileId']?.toString(),
+        json['ChildProfileId']?.toString(),
+        json['nameid']?.toString(),
+      ];
+      for (final c in candidates) {
+        if (c != null &&
+            c.trim().isNotEmpty &&
+            c.trim() != '00000000-0000-0000-0000-000000000000') {
+          return c.trim();
+        }
+      }
+      return '';
+    }
+
     return ChildProfile(
-      id: json['nameid']?.toString() ??
-          json['childProfileId']?.toString() ??
-          json['id']?.toString() ??
-          '',
+      id: resolveValidId(),
       userId: json['userId']?.toString() ??
           json['accountId']?.toString() ??
           json['user_id']?.toString(),

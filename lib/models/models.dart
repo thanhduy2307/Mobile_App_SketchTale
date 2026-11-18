@@ -580,15 +580,39 @@ class StoryTemplatePage {
             .toList()
         : const <CharacterSlotTemplate>[];
 
+    final rawBgStr = rawBg.toString().trim();
+    final cleanBg = (rawBgStr.toLowerCase() == 'string' ||
+            rawBgStr.toLowerCase().endsWith('/string') ||
+            rawBgStr.toLowerCase() == 'null' ||
+            rawBgStr.isEmpty)
+        ? ''
+        : rawBgStr;
+
+    final rawTextStr = rawTextVal.toString().trim();
+    final cleanText = (rawTextStr.toLowerCase() == 'string' ||
+            rawTextStr.toLowerCase() == 'null' ||
+            rawTextStr.isEmpty)
+        ? ''
+        : rawTextStr;
+
+    final audioStr = audioVal?.toString().trim();
+    final cleanAudio = (audioStr == null ||
+            audioStr.toLowerCase() == 'string' ||
+            audioStr.toLowerCase().endsWith('/string') ||
+            audioStr.toLowerCase() == 'null' ||
+            audioStr.isEmpty)
+        ? null
+        : audioStr;
+
     return StoryTemplatePage(
       id: idVal.toString(),
       storyTemplateId: storyIdVal.toString(),
       pageNumber: (pageNumVal is num)
           ? pageNumVal.toInt()
           : int.tryParse(pageNumVal.toString()) ?? 1,
-      imageUrl: rawBg.toString(),
-      rawText: rawTextVal.toString(),
-      audioNarrationUrl: audioVal?.toString(),
+      imageUrl: cleanBg,
+      rawText: cleanText,
+      audioNarrationUrl: cleanAudio,
       slots: parsedSlots,
       animationClips: StoryAnimationClip.parsePageClips(json),
     );
@@ -698,23 +722,71 @@ class StoryTemplate {
   /// Converts this API StoryTemplate into a full interactive Story model
   Story toStory() {
     final themeName = educationTheme?.displayName ?? 'Khám Phá';
+    final cleanDescription = (description.trim().isNotEmpty &&
+            description.trim().toLowerCase() != 'string' &&
+            description.trim().toLowerCase() != 'null')
+        ? description.trim()
+        : '';
+    final cleanCover = (coverImageUrl.trim().isNotEmpty &&
+            coverImageUrl.trim().toLowerCase() != 'string' &&
+            !coverImageUrl.trim().toLowerCase().endsWith('/string') &&
+            fullCoverUrl.isNotEmpty)
+        ? fullCoverUrl
+        : 'assets/images/Br.png';
+
     final List<StoryPage> storyPages;
     if (pages.isNotEmpty) {
-      storyPages = pages.map((p) {
+      final basePages = pages.map((p) {
+        final pageImg = (p.imageUrl.isNotEmpty &&
+                !p.imageUrl.toLowerCase().endsWith('/string') &&
+                p.imageUrl.toLowerCase() != 'string' &&
+                p.fullImageUrl.isNotEmpty)
+            ? p.fullImageUrl
+            : cleanCover;
+        final pageText = (p.rawText.isNotEmpty &&
+                p.rawText.toLowerCase() != 'string')
+            ? p.rawText
+            : (cleanDescription.isNotEmpty
+                ? cleanDescription
+                : 'Trang ${p.pageNumber}: Bé hãy cùng khám phá câu chuyện "$title" thật kỳ diệu nhé!');
+        final audioUrl = (p.audioNarrationUrl != null &&
+                !p.audioNarrationUrl!.toLowerCase().endsWith('/string') &&
+                p.audioNarrationUrl!.toLowerCase() != 'string')
+            ? p.audioNarrationUrl
+            : AppConfig.fallbackAudioUrlForPage(p.pageNumber);
+
         return StoryPage(
           id: p.id,
           pageNumber: p.pageNumber,
-          imageUrl: p.fullImageUrl,
-          textContent: p.rawText,
-          englishSubtitle: p.rawText,
+          imageUrl: pageImg,
+          textContent: pageText,
+          englishSubtitle: pageText,
           chapterTitle: 'Trang ${p.pageNumber}: $title',
           narratorName: 'Chú Gấu Pô',
-          audioNarrationUrl: p.audioNarrationUrl,
+          audioNarrationUrl: audioUrl,
           slots: p.slots,
           animationClips: p.animationClips,
         );
       }).toList();
-      storyPages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+      basePages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+      // Neu backend tong so trang lon hon so trang da tao, bo sung cac trang con lai
+      while (totalPageNumbers > 0 && basePages.length < totalPageNumbers) {
+        final nextNum = basePages.length + 1;
+        basePages.add(
+          StoryPage(
+            id: '$id-fallback-page-$nextNum',
+            pageNumber: nextNum,
+            imageUrl: cleanCover,
+            textContent: 'Trang $nextNum: Bé hãy cùng khám phá tiếp câu chuyện "$title" thật kỳ diệu nhé!',
+            englishSubtitle: 'Page $nextNum: Let us continue exploring "$title" together!',
+            chapterTitle: 'Trang $nextNum: $title',
+            narratorName: 'Chú Gấu Pô',
+            audioNarrationUrl: AppConfig.fallbackAudioUrlForPage(nextNum),
+          ),
+        );
+      }
+      storyPages = basePages;
     } else if (id == '21a89526-20b1-471b-bce0-bc23c4fb7418' || title.toLowerCase().contains('bobby')) {
       storyPages = [
         StoryPage(
@@ -779,11 +851,12 @@ class StoryTemplate {
         return StoryPage(
           id: '$id-fallback-page-$pageNum',
           pageNumber: pageNum,
-          imageUrl: fullCoverUrl,
-          textContent: 'Trang $pageNum: Câu chuyện $title đang mở ra hành trình kỳ diệu dành cho bé.',
+          imageUrl: cleanCover,
+          textContent: 'Trang $pageNum: Câu chuyện "$title" đang mở ra hành trình kỳ diệu dành cho bé.',
           englishSubtitle: 'Page $pageNum: A wonderful journey begins for you.',
           chapterTitle: 'Trang $pageNum: $title',
           narratorName: 'Chú Gấu Pô',
+          audioNarrationUrl: AppConfig.fallbackAudioUrlForPage(pageNum),
         );
       });
     }

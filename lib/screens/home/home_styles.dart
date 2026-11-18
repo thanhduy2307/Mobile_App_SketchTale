@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 
-/// 🎨 Stylesheet CSS cho Home Screen
+/// Stylesheet CSS cho Home Screen
 class HomeStyles {
   HomeStyles._();
 
@@ -54,26 +54,60 @@ class HomeStyles {
 
   static BoxDecoration gateCardDecoration = BoxDecoration(
     color: AppColors.surfaceContainerLowest,
-    borderRadius: BorderRadius.circular(24),
-    border: Border.all(color: AppColors.outline, width: 1.2),
+    borderRadius: BorderRadius.circular(26),
+    border: Border.all(color: AppColors.outline, width: 1.5),
     boxShadow: const [
       BoxShadow(
-        color: Color(0x0C001050),
-        offset: Offset(0, 4),
-        blurRadius: 12,
+        color: Color(0x10001050),
+        offset: Offset(0, 5),
+        blurRadius: 16,
+      ),
+    ],
+  );
+
+  static BoxDecoration drawGateCardDecoration = BoxDecoration(
+    gradient: const LinearGradient(
+      colors: [Color(0xFFFFFFFF), Color(0xFFFFFBEB)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    borderRadius: BorderRadius.circular(28),
+    border: Border.all(color: const Color(0xFFFBBF24), width: 2.2),
+    boxShadow: const [
+      BoxShadow(
+        color: Color(0x24F59E0B),
+        offset: Offset(0, 8),
+        blurRadius: 22,
+      ),
+    ],
+  );
+
+  static BoxDecoration storyGateCardDecoration = BoxDecoration(
+    gradient: const LinearGradient(
+      colors: [Color(0xFFFFFFFF), Color(0xFFF0F9FF)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    borderRadius: BorderRadius.circular(28),
+    border: Border.all(color: const Color(0xFF38BDF8), width: 2.2),
+    boxShadow: const [
+      BoxShadow(
+        color: Color(0x240288D1),
+        offset: Offset(0, 8),
+        blurRadius: 22,
       ),
     ],
   );
 
   static BoxDecoration todayStoryCardDecoration = BoxDecoration(
     color: AppColors.surfaceContainerLowest,
-    borderRadius: BorderRadius.circular(22),
-    border: Border.all(color: AppColors.outline, width: 1.2),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: AppColors.outline, width: 1.0),
     boxShadow: const [
       BoxShadow(
-        color: Color(0x0C001050),
-        offset: Offset(0, 3),
-        blurRadius: 10,
+        color: Color(0x08001050),
+        offset: Offset(0, 2),
+        blurRadius: 6,
       ),
     ],
   );

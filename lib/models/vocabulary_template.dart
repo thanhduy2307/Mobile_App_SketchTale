@@ -27,16 +27,27 @@ class VocabularyTemplate {
   });
 
   factory VocabularyTemplate.fromJson(Map<String, dynamic> json) {
+    final parsedWord = json['wordVi']?.toString() ??
+        json['WordVi']?.toString() ??
+        json['word']?.toString() ??
+        json['Word']?.toString() ??
+        json['wordEn']?.toString() ??
+        '';
+    final parsedMeaning = json['meaning']?.toString() ??
+        json['Meaning']?.toString() ??
+        json['definition']?.toString() ??
+        '';
     return VocabularyTemplate(
-      id: json['id']?.toString() ?? '',
-      storyPageTemplateId: json['storyPageTemplateId']?.toString() ?? '',
-      word: json['word']?.toString() ?? '',
-      meaning: json['meaning']?.toString() ?? '',
-      audioUrl: json['audioUrl']?.toString(),
-      createdAt: json['createdAt']?.toString(),
-      createBy: json['createBy']?.toString(),
-      updatedAt: json['updatedAt']?.toString(),
-      updateBy: json['updateBy']?.toString(),
+      id: (json['id'] ?? json['Id'])?.toString() ?? '',
+      storyPageTemplateId:
+          (json['storyPageTemplateId'] ?? json['StoryPageTemplateId'])?.toString() ?? '',
+      word: parsedWord.trim(),
+      meaning: parsedMeaning.trim(),
+      audioUrl: (json['audioUrl'] ?? json['AudioUrl'])?.toString(),
+      createdAt: (json['createdAt'] ?? json['CreatedAt'])?.toString(),
+      createBy: (json['createBy'] ?? json['CreateBy'])?.toString(),
+      updatedAt: (json['updatedAt'] ?? json['UpdatedAt'])?.toString(),
+      updateBy: (json['updateBy'] ?? json['UpdateBy'])?.toString(),
     );
   }
 
@@ -45,6 +56,7 @@ class VocabularyTemplate {
       'id': id,
       'storyPageTemplateId': storyPageTemplateId,
       'word': word,
+      'wordVi': word,
       'meaning': meaning,
       'audioUrl': audioUrl,
       'createdAt': createdAt,

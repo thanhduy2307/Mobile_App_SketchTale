@@ -1,66 +1,52 @@
 import 'package:flutter/material.dart';
+
 import '../../../theme/app_theme.dart';
+import '../../../utils/responsive.dart';
 import '../login_styles.dart';
 
-/// 🌟 Header thương hiệu SketchTale
+/// Header thuong hieu SketchTale tu dong thich ung cho ca Dien thoai va iPad
 class LoginHeaderBrand extends StatelessWidget {
   const LoginHeaderBrand({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
+    final logoWidth = Responsive.value<double>(
+      context,
+      mobile: 195.0,
+      tablet: 240.0,
+      desktop: 255.0,
+    );
+    final spacing = Responsive.value<double>(
+      context,
+      mobile: 10.0,
+      tablet: 14.0,
+    );
+
     return Center(
       child: Column(
         children: [
           Image.asset(
-            'assets/images/sketchtale-widget.png',
-            width: 64,
-            height: 64,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.auto_stories_rounded,
-                color: AppColors.onPrimary,
-                size: 32,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Image.asset(
             'assets/images/sketchtale-wordmark.png',
-            width: 148,
+            width: logoWidth,
             fit: BoxFit.contain,
             errorBuilder: (_, _, _) => Text(
               'SketchTale',
-              style: AppTypography.displayHero(color: AppColors.onSurface),
+              style: isMobile
+                  ? AppTypography.displayHero(color: AppColors.onSurface).copyWith(fontSize: 28)
+                  : AppTypography.displayHero(color: AppColors.onSurface),
             ),
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: LoginStyles.kickerDecoration,
+          SizedBox(height: spacing),
+          FittedBox(
+            fit: BoxFit.scaleDown,
             child: Text(
-              'MỖI NGÀY, MỘT CÂU CHUYỆN',
-              style: AppTypography.labelSm(color: const Color(0xFF946000)),
+              'Mở trang sách nhỏ. Chạm thế giới lớn.',
               textAlign: TextAlign.center,
+              style: isMobile
+                  ? AppTypography.headlineSm(color: AppColors.onSurface).copyWith(fontSize: 15)
+                  : AppTypography.headlineSm(color: AppColors.onSurface).copyWith(fontSize: 18),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Mở trang sách nhỏ.\nChạm thế giới lớn.',
-            textAlign: TextAlign.center,
-            style: AppTypography.headlineLg(color: AppColors.onSurface),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Một trang sách mới đang chờ bố mẹ và bé.\nCùng đọc, cùng cười, cùng lớn lên.',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
           ),
         ],
       ),

@@ -245,6 +245,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                     context,
                                     state,
                                     template,
+                                    isOriginalTemplate: true,
                                   ),
                               onAssignRoles: () =>
                                   _controller.openRoleAssignmentForTemplate(

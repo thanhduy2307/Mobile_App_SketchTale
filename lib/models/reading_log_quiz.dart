@@ -196,9 +196,12 @@ class ReadingLogSession {
     this.isCompleted = false,
   });
 
-  factory ReadingLogSession.fromJson(Map<String, dynamic> json) {
+  factory ReadingLogSession.fromJson(Map<String, dynamic> rawJson) {
+    final json = (rawJson['data'] is Map<String, dynamic>)
+        ? rawJson['data'] as Map<String, dynamic>
+        : rawJson;
     return ReadingLogSession(
-      id: json['id']?.toString() ?? '',
+      id: json['id']?.toString() ?? json['readingLogId']?.toString() ?? '',
       childProfileId: json['childProfileId']?.toString() ?? '',
       generatedStoryId: json['generatedStoryId']?.toString() ?? '',
       storyTemplateId: json['storyTemplateId']?.toString() ?? '',
@@ -244,13 +247,16 @@ class CompletedReadingLog {
     this.completedAt,
   });
 
-  factory CompletedReadingLog.fromJson(Map<String, dynamic> json) {
+  factory CompletedReadingLog.fromJson(Map<String, dynamic> rawJson) {
+    final json = (rawJson['data'] is Map<String, dynamic>)
+        ? rawJson['data'] as Map<String, dynamic>
+        : rawJson;
     DateTime? dt;
     if (json['completedAt'] != null) {
       dt = DateTime.tryParse(json['completedAt'].toString());
     }
     return CompletedReadingLog(
-      id: json['id']?.toString() ?? '',
+      id: json['id']?.toString() ?? json['readingLogId']?.toString() ?? '',
       childProfileId: json['childProfileId']?.toString() ?? '',
       generatedStoryId: json['generatedStoryId']?.toString() ?? '',
       storyTemplateId: json['storyTemplateId']?.toString() ?? '',

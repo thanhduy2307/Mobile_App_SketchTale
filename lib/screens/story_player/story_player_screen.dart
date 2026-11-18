@@ -5,7 +5,7 @@ import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/app_loading.dart';
-import '../../widgets/story_player/story_animation_sheet.dart';
+import '../../widgets/app_screen_background.dart';
 import '../../widgets/story_player/story_audio_player_card.dart';
 import '../../widgets/story_player/story_canvas_view.dart';
 import '../../widgets/story_player/story_header_bar.dart';
@@ -34,12 +34,14 @@ class StoryPlayerScreen extends StatefulWidget {
   final AppState appState;
   final Story story;
   final String? readingLogId;
+  final bool isOriginalTemplate;
 
   const StoryPlayerScreen({
     super.key,
     required this.appState,
     required this.story,
     this.readingLogId,
+    this.isOriginalTemplate = false,
   });
 
   @override
@@ -62,6 +64,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
       story: widget.story,
       appState: widget.appState,
       readingLogId: widget.readingLogId,
+      isOriginalTemplate: widget.isOriginalTemplate,
     )..initialize();
   }
 
@@ -81,33 +84,6 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _openAnimationControlSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StoryAnimationSheet(
-        currentMode: _controller.animationMode,
-        currentAction:
-            _controller.manualToyAction ?? _controller.characterAction,
-        currentScale: _controller.activePageSlots.isNotEmpty
-            ? _controller.manualScaleMultiplier
-            : _controller.characterScale,
-        flipHorizontal: _controller.activePageSlots.isNotEmpty
-            ? (_controller.manualFlipOverride ??
-                  _controller.activePageSlots.first.flipHorizontal)
-            : _controller.flipHorizontal,
-        onModeChanged: (mode) => _controller.setAnimationMode(mode),
-        onActionChanged: (act) => _controller.setCharacterAction(act),
-        onScaleChanged: (scale) => _controller.setScale(scale),
-        onFlipChanged: (flip) => _controller.setFlip(flip),
-        onScreenShake: _controller.triggerScreenShake,
-        onSpawnFireflies: _controller.spawnFireflies,
-        onResetPosition: _controller.resetCharacterPosition,
       ),
     );
   }
@@ -137,83 +113,84 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _controller,
-      builder: (context, _) {
-        if (_controller.isLoadingPages) {
-          return Scaffold(
-            backgroundColor: AppColors.surface,
-            appBar: AppBar(
+    return AppScreenBackground(
+      child: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) {
+          if (_controller.isLoadingPages) {
+            return Scaffold(
               backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.of(context).pop(),
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                title: Text(
+                  widget.story.title,
+                  style: AppTypography.headlineSm(color: AppColors.onSurface),
+                ),
               ),
-              title: Text(
-                widget.story.title,
-                style: AppTypography.headlineSm(color: AppColors.onSurface),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const AppLoadingLogo(size: 80),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Đang Mở Cuốn Truyện Kỳ Diệu...',
+                      style: AppTypography.headlineMd(color: AppColors.primary),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Bé chờ một xíu nhé, các trang sách đang mở ra...',
+                      style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const AppLoadingLogo(size: 80),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Đang Mở Cuốn Truyện Kỳ Diệu...',
-                    style: AppTypography.headlineMd(color: AppColors.primary),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Bé chờ một xíu nhé, các trang sách đang mở ra...',
-                    style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
+            );
+          }
 
-        final pages = _controller.pages.isNotEmpty
-            ? _controller.pages
-            : widget.story.pages;
+          final pages = _controller.pages.isNotEmpty
+              ? _controller.pages
+              : widget.story.pages;
 
-        if (pages.isEmpty) {
-          return Scaffold(
-            backgroundColor: AppColors.surface,
-            appBar: AppBar(
+          if (pages.isEmpty) {
+            return Scaffold(
               backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.of(context).pop(),
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
               ),
-            ),
-            body: Center(
-              child: AppEmptyState(
-                icon: Icons.menu_book_rounded,
-                title: 'Chưa có nội dung cho câu chuyện này',
-                message: 'Bé hãy thử chọn một cuốn truyện khác trong Thư viện nhé!',
-                actionLabel: 'Quay Lại',
-                onAction: () => Navigator.of(context).pop(),
+              body: Center(
+                child: AppEmptyState(
+                  icon: Icons.menu_book_rounded,
+                  title: 'Chưa có nội dung cho câu chuyện này',
+                  message: 'Bé hãy thử chọn một cuốn truyện khác trong Thư viện nhé!',
+                  actionLabel: 'Quay Lại',
+                  onAction: () => Navigator.of(context).pop(),
+                ),
               ),
-            ),
-          );
-        }
+            );
+          }
 
-        final currentPage =
-            (_controller.currentPageIndex < pages.length)
-            ? pages[_controller.currentPageIndex]
-            : pages.first;
+          final currentPage =
+              (_controller.currentPageIndex < pages.length)
+              ? pages[_controller.currentPageIndex]
+              : pages.first;
 
-        final vocabList = _controller.allStoryVocabularies.values.isNotEmpty
-            ? _controller.allStoryVocabularies.values.toList()
-            : _controller.pageVocabularies;
+          final vocabList = _controller.allStoryVocabularies.values.isNotEmpty
+              ? _controller.allStoryVocabularies.values.toList()
+              : _controller.pageVocabularies;
 
-        return Scaffold(
-          backgroundColor: AppColors.surface,
+          return Scaffold(
+            backgroundColor: Colors.transparent,
           body: SafeArea(
             child: SingleChildScrollView(
               controller: _scrollController,
@@ -246,6 +223,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                           onShowToast: _showToast,
                         ),
                         onBackPressed: () => Navigator.of(context).pop(),
+                        showRolesButton: true,
                         onRolesTap: () => RoleAssignmentSheet.show(
                           context,
                           appState: widget.appState,
@@ -253,7 +231,16 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                           storyRoles: _controller.storyRoles,
                           storyMappings: _controller.storyMappings,
                           onShowToast: _showToast,
-                          onRolesChanged: () => setState(() {}),
+                          onRolesChanged: () {
+                            _controller.isOriginalTemplate = false;
+                            if (_controller.pages.isNotEmpty &&
+                                _controller.currentPageIndex < _controller.pages.length) {
+                              _controller.syncActionForCurrentPage(
+                                _controller.pages[_controller.currentPageIndex],
+                              );
+                            }
+                            setState(() {});
+                          },
                         ),
                       ),
 
@@ -266,55 +253,48 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                           onTabChanged: (tab) => _controller.setActiveTab(tab),
                           vocabCount: vocabList.length,
                           quizCount: _controller.storyQuizzes.length,
-                          onOpenAnimationControls: _openAnimationControlSheet,
                         ),
                         const SizedBox(height: 12),
                       ],
 
                       // 3. Tab Contents: Reader or Vocabulary or Quiz
                       if (_controller.activeTab == StoryPlayerTab.reader) ...[
-                        // A. Interactive 16:9 Canvas with Content Manager Slot Animations
+                        // A. 16:9 Canvas bám sát 100% thiết lập của Content Manager (CM)
                         Builder(
                           builder: (context) {
                             final stageSlots = _controller.buildStageSlotItems(
                               currentPage,
                             );
+                            final rawSubtitle = currentPage?.characterSpeech ??
+                                currentPage?.textContent;
+                            final effectiveSubtitle = (rawSubtitle != null &&
+                                    rawSubtitle.trim().isNotEmpty &&
+                                    rawSubtitle.trim().toLowerCase() != 'string' &&
+                                    rawSubtitle.trim().toLowerCase() != 'null')
+                                ? rawSubtitle.trim()
+                                : 'Trang ${_controller.currentPageIndex + 1}: Cùng khám phá câu chuyện "${widget.story.title}"';
+
+                            final rawImg = currentPage?.imageUrl ?? '';
+                            final effectiveImage = (rawImg.isNotEmpty &&
+                                    rawImg.toLowerCase() != 'string' &&
+                                    !rawImg.toLowerCase().endsWith('/string') &&
+                                    rawImg.toLowerCase() != 'null')
+                                ? rawImg
+                                : ((widget.story.coverUrl.isNotEmpty &&
+                                        widget.story.coverUrl.toLowerCase() != 'string' &&
+                                        !widget.story.coverUrl.toLowerCase().endsWith('/string'))
+                                    ? widget.story.coverUrl
+                                    : 'assets/images/Br.png');
+
                             return StoryCanvasView(
-                              screenShakeOffset: _controller.screenShakeOffset,
-                              imageUrl:
-                                  currentPage?.imageUrl ??
-                                  widget.story.coverUrl,
-                              particles: _controller.particles,
+                              imageUrl: effectiveImage,
                               chapterTitle:
                                   currentPage?.chapterTitle ??
-                                  'Trang ${_controller.currentPageIndex + 1}',
-                              heroCharacter: widget.appState.heroCharacter,
-                              activeRoleName: stageSlots.isNotEmpty
-                                  ? stageSlots.first.displayName
-                                  : (_controller.storyRoles.isNotEmpty
-                                        ? _controller.storyRoles.first.roleName
-                                        : null),
-                              characterSpeech: currentPage?.characterSpeech,
-                              characterPosition: _controller.characterPosition,
-                              flipHorizontal: _controller.flipHorizontal,
-                              characterScale: _controller.characterScale,
-                              animationMode: _controller.animationMode,
-                              characterAction: _controller.characterAction,
-                              manualToyAction: _controller.manualToyAction,
+                                  'Trang ${_controller.currentPageIndex + 1} / ${pages.length}',
+                              category: widget.story.category,
+                              subtitleText: effectiveSubtitle,
                               stageSlots: stageSlots,
-                              isPlayingTimeline:
-                                  _controller.playhead.isAnimating,
-                              onScreenShake: _controller.triggerScreenShake,
-                              onPositionChanged: (pos) =>
-                                  _controller.characterPosition = pos,
-                              onDragEndPosition: (pos) =>
-                                  _controller.updateCharacterPosition(pos),
-                              onActionChanged: (act) =>
-                                  _controller.setCharacterAction(act),
-                              onTapSparkles: _controller.spawnFireflies,
-                              onOpenAnimationControls:
-                                  _openAnimationControlSheet,
-                              onReplayMotion: _controller.replayPageMotion,
+                              heroCharacter: widget.appState.heroCharacter,
                             );
                           },
                         ),
@@ -337,9 +317,10 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
 
                         const SizedBox(height: 12),
 
-                        // C. Clean Kid-Friendly Story Text Card với Highlight Từ Vựng & Linh vật tương tác
+                        // C. Clean Kid-Friendly Story Text Card với Highlight Từ Vựng & Linh vật tương tác (Giu nguyen giao dien doc nhu cu)
                         Builder(
                           builder: (context) {
+                            final currentPageId = (currentPage?.id ?? '').toLowerCase();
                             final List<VocabularyTemplate> combinedVocabs = [
                               ..._controller.pageVocabularies,
                               if (currentPage != null && currentPage.vocabularies.isNotEmpty)
@@ -351,7 +332,12 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                                   word: currentPage.vocab!.word,
                                   meaning: currentPage.vocab!.definition,
                                 ),
-                              ..._controller.allStoryVocabularies.values,
+                              ..._controller.allStoryVocabularies.values.where(
+                                (v) =>
+                                    currentPageId.isEmpty ||
+                                    v.storyPageTemplateId.isEmpty ||
+                                    v.storyPageTemplateId.toLowerCase() == currentPageId,
+                              ),
                             ];
                             final Map<String, VocabularyTemplate> dedupMap = {};
                             for (final v in combinedVocabs) {
@@ -362,8 +348,15 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                             }
                             final effectiveVocabs = dedupMap.values.toList();
 
+                            final rawContent = currentPage?.textContent ?? '';
+                            final effectiveContent = (rawContent.isNotEmpty &&
+                                    rawContent.toLowerCase() != 'string' &&
+                                    rawContent.toLowerCase() != 'null')
+                                ? rawContent
+                                : 'Trang ${_controller.currentPageIndex + 1}: Bé hãy cùng khám phá câu chuyện "${widget.story.title}" thật kỳ diệu nhé!';
+
                             return StoryTextCard(
-                              textContent: currentPage?.textContent ?? '',
+                              textContent: effectiveContent,
                               englishSubtitle: currentPage?.englishSubtitle,
                               showEnglish: _controller.showEnglish,
                               narratorName:
@@ -386,6 +379,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                                   onMarkLearned: () =>
                                       _controller.markVocabLearned(vocab.id),
                                   onShowToast: _showToast,
+                                  onInspectVocab: _controller.inspectVocabularyDetail,
                                 );
                                 if (wasPlaying) {
                                   await _controller.audioService.resumeAudio();
@@ -419,7 +413,6 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                               context,
                               storyTitle: widget.story.title,
                               onOpenQuizReward: _openQuizRewardScreen,
-                              onOpenAnimationControls: _openAnimationControlSheet,
                             );
                           },
                         ),
@@ -440,12 +433,12 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                             onMarkLearned: () =>
                                 _controller.markVocabLearned(vocab.id),
                             onShowToast: _showToast,
+                            onInspectVocab: _controller.inspectVocabularyDetail,
                           ),
                           onBackToReader: () =>
                               _controller.setActiveTab(StoryPlayerTab.reader),
                           onGoToQuiz: () =>
                               _controller.setActiveTab(StoryPlayerTab.quiz),
-                          onOpenAnimationControls: _openAnimationControlSheet,
                         ),
                       ] else if (_controller.activeTab ==
                           StoryPlayerTab.quiz) ...[
@@ -480,6 +473,7 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 }

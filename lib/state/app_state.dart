@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/models.dart';
+import '../services/api_client.dart';
 import '../services/child_profile_service.dart';
 import '../services/story_service.dart';
 import '../services/auth_service.dart';
@@ -16,6 +20,7 @@ import '../utils/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppState extends ChangeNotifier {
+  static AppState? current;
   // Kid Profile Data
   String kidName = 'Bé Bống';
   int stars = 120;
@@ -33,6 +38,26 @@ class AppState extends ChangeNotifier {
   String userRole = 'Child'; // "Child", "Parent", "Admin", "ContentManager"
   String? childUsername;
   UserProfile? userProfile;
+  String? selectedGenderTheme; // 'boy' hoac 'girl'
+
+  bool get hasSelectedGenderTheme =>
+      selectedGenderTheme != null && selectedGenderTheme!.isNotEmpty;
+
+  void selectGenderTheme(String theme) {
+    selectedGenderTheme = theme;
+    notifyListeners();
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('sketchtale_gender_theme', theme);
+    }).catchError((_) {});
+  }
+
+  void resetGenderTheme() {
+    selectedGenderTheme = null;
+    notifyListeners();
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.remove('sketchtale_gender_theme');
+    }).catchError((_) {});
+  }
 
   /// ID (GUID) của tài khoản User đang đăng nhập (lấy từ UserProfile, giải mã JWT token, hoặc Active Profile)
   String? get currentUserId =>
@@ -58,13 +83,19 @@ class AppState extends ChangeNotifier {
       return activeChildProfile!.avatarAssetPath;
     }
     final lower = kidName.toLowerCase();
-    if (lower.contains('bống') || lower.contains('đổng') || lower.contains('bong') || lower.contains('dong')) {
+    if (lower.contains('bống') ||
+        lower.contains('đổng') ||
+        lower.contains('bong') ||
+        lower.contains('dong')) {
       return 'assets/images/child-avatars/child-01.png';
     }
     if (lower.contains('bo') || lower.contains('bơ') || lower.contains('bảo')) {
       return 'assets/images/child-avatars/child-02.png';
     }
-    if (lower.contains('mimi') || lower.contains('mi mi') || lower.contains('mây') || lower.contains('may')) {
+    if (lower.contains('mimi') ||
+        lower.contains('mi mi') ||
+        lower.contains('mây') ||
+        lower.contains('may')) {
       return 'assets/images/child-avatars/child-03.png';
     }
     return 'assets/images/child-avatars/child-01.png';
@@ -73,18 +104,22 @@ class AppState extends ChangeNotifier {
   void setCustomAvatar(String path) {
     customAvatarPath = path;
     notifyListeners();
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setString('sketchtale_child_avatar', path);
-    }).catchError((_) {});
+    SharedPreferences.getInstance()
+        .then((prefs) {
+          prefs.setString('sketchtale_child_avatar', path);
+        })
+        .catchError((_) {});
   }
 
   /// ID hợp lệ của hồ sơ trẻ em (ChildProfileId) dùng cho các API
   String? get effectiveChildProfileId {
-    if (activeChildProfile != null && AppConfig.isValidUuid(activeChildProfile!.id)) {
+    if (activeChildProfile != null &&
+        AppConfig.isValidUuid(activeChildProfile!.id)) {
       return activeChildProfile!.id;
     }
     for (final p in childProfiles) {
-      if (AppConfig.isValidUuid(p.id) && p.id != '00000000-0000-0000-0000-000000000000') {
+      if (AppConfig.isValidUuid(p.id) &&
+          p.id != '00000000-0000-0000-0000-000000000000') {
         return p.id;
       }
     }
@@ -223,8 +258,32 @@ class AppState extends ChangeNotifier {
   );
 
   AppState() {
+    current = this;
     _initializeInitialData();
     restoreSession();
+  }
+
+  Timer? _tokenRefreshTimer;
+
+  void _startTokenRefreshTimer() {
+    _tokenRefreshTimer?.cancel();
+    // Token co thoi han song 60 phut theo Section 1 cua AUTH_CONTROLLER_README.md.
+    // Chu dong lam moi moi 45 phut khi nguoi dung dang hoat dong de tranh bi het han dot ngot.
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 45), (timer) async {
+      if (isLoggedIn && (authToken != null || refreshToken != null)) {
+        if (kDebugMode) {
+          debugPrint('[AppState] Dinh ky 45 phut: Chu dong lam moi token ngam...');
+        }
+        await refreshSession();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  void _stopTokenRefreshTimer() {
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = null;
   }
 
   void _initializeInitialData() {
@@ -251,6 +310,7 @@ class AppState extends ChangeNotifier {
     characters = [];
     _completedStoryIds.clear();
     stories = stories.map((s) => s.copyWith(isCompleted: false)).toList();
+    selectedGenderTheme = null; // Yeu cau chon khong gian khi dang nhap moi
 
     if (name.trim().isNotEmpty) {
       kidName = name.trim();
@@ -294,6 +354,8 @@ class AppState extends ChangeNotifier {
     }
 
     notifyListeners();
+    ApiClient.instance.updateToken(authToken);
+    _startTokenRefreshTimer();
 
     // Persist session to SharedPreferences (LocalStorage on Web)
     try {
@@ -334,6 +396,10 @@ class AppState extends ChangeNotifier {
       final savedNickname = prefs.getString('sketchtale_nickname');
       final savedRole = prefs.getString('sketchtale_role');
       final savedAvatar = prefs.getString('sketchtale_child_avatar');
+      final savedTheme = prefs.getString('sketchtale_gender_theme');
+      if (savedTheme != null && savedTheme.isNotEmpty) {
+        selectedGenderTheme = savedTheme;
+      }
       if (savedAvatar != null && savedAvatar.isNotEmpty) {
         customAvatarPath = savedAvatar;
       }
@@ -371,6 +437,8 @@ class AppState extends ChangeNotifier {
         }
 
         notifyListeners();
+        ApiClient.instance.updateToken(authToken);
+        _startTokenRefreshTimer();
 
         // Tải lại dữ liệu đúng tài khoản sau khi khôi phục phiên
         await _loadCharactersFromPrefs();
@@ -408,25 +476,35 @@ class AppState extends ChangeNotifier {
         // 1. Khớp theo userId tài khoản
         ChildProfile? matched;
         if (effectiveUserId != null && effectiveUserId.isNotEmpty) {
-          matched = childProfiles.where(
-            (p) =>
-                (p.userId != null &&
-                    p.userId!.toLowerCase() == effectiveUserId.toLowerCase()) ||
-                p.id.toLowerCase() == effectiveUserId.toLowerCase(),
-          ).firstOrNull;
+          matched = childProfiles
+              .where(
+                (p) =>
+                    (p.userId != null &&
+                        p.userId!.toLowerCase() ==
+                            effectiveUserId.toLowerCase()) ||
+                    p.id.toLowerCase() == effectiveUserId.toLowerCase(),
+              )
+              .firstOrNull;
         }
 
         // 2. Khớp theo username hoặc tên bé nếu chưa khớp
-        if (matched == null && childUsername != null && childUsername!.isNotEmpty) {
-          matched = childProfiles.where(
-            (p) => p.nickName.toLowerCase() == childUsername!.toLowerCase(),
-          ).firstOrNull;
+        if (matched == null &&
+            childUsername != null &&
+            childUsername!.isNotEmpty) {
+          matched = childProfiles
+              .where(
+                (p) => p.nickName.toLowerCase() == childUsername!.toLowerCase(),
+              )
+              .firstOrNull;
         }
 
-        if (matched == null && kidName.isNotEmpty && kidName != 'Bé Bống' && kidName != 'Bé Đổng') {
-          matched = childProfiles.where(
-            (p) => p.nickName.toLowerCase() == kidName.toLowerCase(),
-          ).firstOrNull;
+        if (matched == null &&
+            kidName.isNotEmpty &&
+            kidName != 'Bé Bống' &&
+            kidName != 'Bé Đổng') {
+          matched = childProfiles
+              .where((p) => p.nickName.toLowerCase() == kidName.toLowerCase())
+              .firstOrNull;
         }
 
         // 3. Nếu tìm thấy đúng hồ sơ của tài khoản đang đăng nhập -> gán activeChildProfile
@@ -437,7 +515,8 @@ class AppState extends ChangeNotifier {
           remainingTimeMinutesAllowed = matched.remainingTimeLimit;
           dailyCharacterLimit = matched.dailyCharacterLimit;
           remainingCharacterLimit = matched.remainingCharacterLimit;
-        } else if (activeChildProfile == null && userRole.toLowerCase() == 'parent') {
+        } else if (activeChildProfile == null &&
+            userRole.toLowerCase() == 'parent') {
           // Chỉ phụ huynh quản lý nhiều con thì mới mặc định chọn bé đầu tiên
           activeChildProfile = childProfiles.first;
           kidName = childProfiles.first.nickName;
@@ -619,7 +698,9 @@ class AppState extends ChangeNotifier {
         educationThemes = result.themes;
         final convertedStories = storyTemplates
             .map((t) => t.toStory())
-            .map((s) => s.copyWith(isCompleted: _completedStoryIds.contains(s.id)))
+            .map(
+              (s) => s.copyWith(isCompleted: _completedStoryIds.contains(s.id)),
+            )
             .toList();
         if (convertedStories.isNotEmpty) {
           stories = convertedStories;
@@ -629,6 +710,7 @@ class AppState extends ChangeNotifier {
             orElse: () => rec.isNotEmpty ? rec.first : stories[0],
           );
           currentStory = unreadStory;
+          syncCompletedStoriesFromBackend();
         }
       } else {
         storyTemplates = [];
@@ -691,6 +773,8 @@ class AppState extends ChangeNotifier {
 
   /// Implements Section 3: Logout & JWT Blacklist
   Future<void> logout() async {
+    _stopTokenRefreshTimer();
+    ApiClient.instance.updateToken(null);
     final tokenToInvalidate = authToken;
     isLoggedIn = false;
     authToken = null;
@@ -705,6 +789,7 @@ class AppState extends ChangeNotifier {
     _completedStoryIds.clear();
     stories = stories.map((s) => s.copyWith(isCompleted: false)).toList();
     userRole = 'Child';
+    selectedGenderTheme = null;
     notifyListeners();
 
     // Clear saved session from SharedPreferences
@@ -714,6 +799,7 @@ class AppState extends ChangeNotifier {
       await prefs.remove('sketchtale_logged_in');
       await prefs.remove('sketchtale_auth_token');
       await prefs.remove('sketchtale_refresh_token');
+      await prefs.remove('sketchtale_gender_theme');
       await prefs.remove('sketchtale_username');
       await prefs.remove('sketchtale_nickname');
       await prefs.remove('sketchtale_role');
@@ -731,26 +817,17 @@ class AppState extends ChangeNotifier {
 
   /// Implements Section 4: Refresh Token Rotation
   Future<bool> refreshSession() async {
-    if (authToken == null && refreshToken == null) return false;
-    final res = await AuthService.refreshToken(
-      token: authToken,
-      refreshToken: refreshToken,
-    );
-    if (res.isSuccess && res.token != null) {
-      authToken = res.token;
-      if (res.refreshToken != null) {
-        refreshToken = res.refreshToken;
-      }
-      if (res.role != null) {
-        userRole = res.role!;
-      }
-      notifyListeners();
-      return true;
-    } else {
-      // 7-day refresh token expired -> Logout immediately
-      await logout();
-      return false;
+    final token = await ApiClient.instance.refreshToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  @override
+  void dispose() {
+    _stopTokenRefreshTimer();
+    if (identical(current, this)) {
+      current = null;
     }
+    super.dispose();
   }
 
   /// Fetches User Profile from GET /api/auth/profile
@@ -767,7 +844,8 @@ class AppState extends ChangeNotifier {
 
         // Đồng bộ chuẩn xác thông tin tài khoản đang đăng nhập
         if (profile.isChild) {
-          if (profile.childProfile != null && profile.childProfile!.isNotEmpty) {
+          if (profile.childProfile != null &&
+              profile.childProfile!.isNotEmpty) {
             final child = ChildProfile.fromJson(profile.childProfile!);
             activeChildProfile = child;
             if (child.nickName.isNotEmpty) {
@@ -794,7 +872,9 @@ class AppState extends ChangeNotifier {
   Set<String> get completedStoryIds => Set.unmodifiable(_completedStoryIds);
 
   List<Story> get completedStories {
-    return stories.where((s) => s.isCompleted || _completedStoryIds.contains(s.id)).toList();
+    return stories
+        .where((s) => s.isCompleted || _completedStoryIds.contains(s.id))
+        .toList();
   }
 
   void markStoryCompleted(String storyId) {
@@ -829,9 +909,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setHeroCharacter(KidCharacter? character) => assignHeroCharacter(character);
+  void setHeroCharacter(KidCharacter? character) =>
+      assignHeroCharacter(character);
 
-  void setCompanionCharacter(KidCharacter? character) => assignCompanionCharacter(character);
+  void setCompanionCharacter(KidCharacter? character) =>
+      assignCompanionCharacter(character);
 
   void setSelectedCategory(String category) {
     selectedCategory = category;
@@ -894,8 +976,10 @@ class AppState extends ChangeNotifier {
     return 'guest';
   }
 
-  String get _charactersStorageKey => 'sketchtale_characters_$_userStorageSuffix';
-  String get _completedStoriesStorageKey => 'sketchtale_completed_stories_$_userStorageSuffix';
+  String get _charactersStorageKey =>
+      'sketchtale_characters_$_userStorageSuffix';
+  String get _completedStoriesStorageKey =>
+      'sketchtale_completed_stories_$_userStorageSuffix';
 
   Future<void> _loadCompletedStoriesFromPrefs() async {
     try {
@@ -931,29 +1015,59 @@ class AppState extends ChangeNotifier {
   Future<void> _saveCompletedStoriesToPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_completedStoriesStorageKey, _completedStoryIds.toList());
+      await prefs.setStringList(
+        _completedStoriesStorageKey,
+        _completedStoryIds.toList(),
+      );
     } catch (e) {
       debugPrint('[AppState] Lỗi lưu truyện hoàn thành: $e');
     }
   }
 
+  /// Danh sách phiên đọc đã hoàn thành trên Backend
+  List<CompletedReadingLog> completedReadingLogs = [];
+
   /// Đồng bộ danh sách truyện đã hoàn thành từ Backend API
   /// GET /api/reading-logs/child-profiles/{childProfileId}/completed
   Future<void> syncCompletedStoriesFromBackend() async {
-    final childId = activeChildProfile?.id;
-    if (childId == null || !AppConfig.isValidUuid(childId)) return;
+    var childId = effectiveChildProfileId;
+    if (childId == null || !AppConfig.isValidUuid(childId)) {
+      if (childProfiles.isEmpty && isLoggedIn) {
+        await fetchChildProfiles();
+        childId = effectiveChildProfileId;
+      }
+    }
+    if (childId == null || !AppConfig.isValidUuid(childId)) {
+      if (kDebugMode) {
+        debugPrint('[AppState] Khong the syncCompletedStories: childId khong hop le ($childId)');
+      }
+      return;
+    }
 
     try {
+      if (kDebugMode) {
+        debugPrint('[AppState] Dong bo truyen da doc GET /api/reading-logs/child-profiles/$childId/completed');
+      }
       final remoteCompleted = await ReadingLogService.fetchCompletedStories(
         childProfileId: childId,
         token: authToken,
       );
 
+      completedReadingLogs = remoteCompleted;
+
       if (remoteCompleted.isNotEmpty) {
         bool hasChanges = false;
         for (final item in remoteCompleted) {
-          if (item.storyTemplateId.isNotEmpty && !_completedStoryIds.contains(item.storyTemplateId)) {
+          if (item.isCompleted &&
+              item.storyTemplateId.isNotEmpty &&
+              !_completedStoryIds.contains(item.storyTemplateId)) {
             _completedStoryIds.add(item.storyTemplateId);
+            hasChanges = true;
+          }
+          if (item.isCompleted &&
+              item.generatedStoryId.isNotEmpty &&
+              !_completedStoryIds.contains(item.generatedStoryId)) {
+            _completedStoryIds.add(item.generatedStoryId);
             hasChanges = true;
           }
         }

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 /// Result from ContentReportService
 class ContentReportResult {
@@ -30,7 +31,7 @@ class ContentReportResult {
 
 /// Service handling Child Safety & Content Reports (/api/content-reports)
 class ContentReportService {
-  static final http.Client _client = http.Client();
+  static final http.Client _client = ApiClient.instance;
 
   static Map<String, String> _buildHeaders(String? token) {
     final headers = <String, String>{

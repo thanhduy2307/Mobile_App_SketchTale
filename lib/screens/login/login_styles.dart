@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 
-/// 🎨 Stylesheet cho Màn hình Đăng Nhập
+/// Stylesheet cho Man hinh Dang Nhap
 class LoginStyles {
   LoginStyles._();
 

@@ -6,20 +6,20 @@ import '../story_player_styles.dart';
 class StoryFinishedDialog extends StatefulWidget {
   final String storyTitle;
   final VoidCallback onOpenQuizReward;
-  final VoidCallback onOpenAnimationControls;
+  final VoidCallback? onOpenAnimationControls;
 
   const StoryFinishedDialog({
     super.key,
     required this.storyTitle,
     required this.onOpenQuizReward,
-    required this.onOpenAnimationControls,
+    this.onOpenAnimationControls,
   });
 
   static Future<void> show(
     BuildContext context, {
     required String storyTitle,
     required VoidCallback onOpenQuizReward,
-    required VoidCallback onOpenAnimationControls,
+    VoidCallback? onOpenAnimationControls,
   }) {
     return showDialog(
       context: context,

@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'app_loading.dart';
+import 'character_cutout_image.dart';
 
 /// Chế độ hoạt họa để người dùng so sánh và cân nhắc
 enum AnimationMode {
@@ -283,21 +283,11 @@ class _SquashStretchCharacterState extends State<SquashStretchCharacter>
   }
 
   Widget _buildCharacterImage() {
-    final path = widget.imagePath;
-    if (path.startsWith('assets/')) {
-      return Image.asset(
-        path,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => _fallbackIcon(),
-      );
-    } else {
-      return Image.network(
-        path,
-        fit: BoxFit.contain,
-        loadingBuilder: appImageLoadingBuilder,
-        errorBuilder: (_, _, _) => _fallbackIcon(),
-      );
-    }
+    return CharacterCutoutImage(
+      imageUrl: widget.imagePath,
+      fit: BoxFit.contain,
+      errorFallbackBuilder: _fallbackIcon,
+    );
   }
 
   Widget _fallbackIcon() {

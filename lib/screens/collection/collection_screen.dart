@@ -46,9 +46,10 @@ class _CollectionScreenState extends State<CollectionScreen> {
   void initState() {
     super.initState();
     _controller = CollectionController();
-    final childId = widget.appState.activeChildProfile?.id;
+    final childId = widget.appState.effectiveChildProfileId;
     _controller.loadQuizHistory(childId, widget.appState.authToken);
     _controller.loadCreditLogs(widget.appState.authToken);
+    widget.appState.syncCompletedStoriesFromBackend();
   }
 
   @override

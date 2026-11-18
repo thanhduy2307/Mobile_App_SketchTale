@@ -4,13 +4,14 @@ import '../../../models/models.dart';
 import '../../../theme/app_theme.dart';
 import '../story_player_styles.dart';
 
-/// 📖 BottomSheet: Xem chi tiết nghĩa từ vựng & đánh dấu đã hiểu
-/// Cho phép bé chạm ra ngoài để đóng, hoặc bấm nút đóng.
-class VocabDetailSheet extends StatelessWidget {
+/// BottomSheet: Xem chi tiet nghia tu vung & danh dau da hieu
+/// Tu dong goi API GET /api/story-vocabulary/{id} de dong bo chi tiet tu vung khi mo.
+class VocabDetailSheet extends StatefulWidget {
   final VocabularyTemplate vocab;
   final bool isLearned;
   final VoidCallback onMarkLearned;
   final void Function(String msg) onShowToast;
+  final Future<VocabularyTemplate> Function(VocabularyTemplate vocab)? onInspectVocab;
 
   const VocabDetailSheet({
     super.key,
@@ -18,6 +19,7 @@ class VocabDetailSheet extends StatelessWidget {
     required this.isLearned,
     required this.onMarkLearned,
     required this.onShowToast,
+    this.onInspectVocab,
   });
 
   static Future<void> show(
@@ -26,6 +28,7 @@ class VocabDetailSheet extends StatelessWidget {
     required bool isLearned,
     required VoidCallback onMarkLearned,
     required void Function(String msg) onShowToast,
+    Future<VocabularyTemplate> Function(VocabularyTemplate vocab)? onInspectVocab,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -38,12 +41,39 @@ class VocabDetailSheet extends StatelessWidget {
         isLearned: isLearned,
         onMarkLearned: onMarkLearned,
         onShowToast: onShowToast,
+        onInspectVocab: onInspectVocab,
       ),
     );
   }
 
   @override
+  State<VocabDetailSheet> createState() => _VocabDetailSheetState();
+}
+
+class _VocabDetailSheetState extends State<VocabDetailSheet> {
+  late VocabularyTemplate _vocab;
+
+  @override
+  void initState() {
+    super.initState();
+    _vocab = widget.vocab;
+    _loadLatestDetail();
+  }
+
+  Future<void> _loadLatestDetail() async {
+    if (widget.onInspectVocab == null) return;
+    final updated = await widget.onInspectVocab!(widget.vocab);
+    if (mounted) {
+      setState(() => _vocab = updated);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final vocab = _vocab;
+    final isLearned = widget.isLearned;
+    final onMarkLearned = widget.onMarkLearned;
+    final onShowToast = widget.onShowToast;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
       decoration: StoryPlayerStyles.bottomSheetDecoration,

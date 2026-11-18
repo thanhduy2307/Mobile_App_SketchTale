@@ -1,16 +1,16 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../../models/models.dart';
 import '../../../theme/app_theme.dart';
 
-/// 🔠 Danh Sách Đáp Án Đố Vui Linh Hoạt & Safe-to-Fail UX (Không Phạt Khi Sai)
-/// - Tự động co giãn chiều cao theo độ dài đáp án (1 từ đến cả câu dài)
-/// - Căn giữa, chữ to rõ, khoảng cách 14-16px chống bấm nhầm
-/// - Chọn sai: Rung lắc ngang (shake), đổi sang màu cam nhạt/xám mờ, vô hiệu hóa thẻ và hiện linh vật nhắc nhở
-/// - Chọn đúng: Nảy lên (bounce), đổi sang màu xanh lá tươi, bắn hiệu ứng ngôi sao và tự động chuyển câu sau 1.5s
+/// Danh Sach Dap An Do Vui Linh Hoat & Safe-to-Fail UX (Khong Phat Khi Sai)
+/// - Tu dong co gian chieu cao theo do dai dap an (1 tu den ca cau dai)
+/// - Can giua, chu to ro, khoang cach 14-16px chong bam nham
+/// - Chon sai: Rung lac ngang (shake), hien bieu tuong sai ben trai (khong hien ben phai),
+///   khong khoa o dap an va tiep tuc nhac be neu be bam lai o do
+/// - Chon dung: Nay len (bounce), doi sang mau xanh la tuoi, tu dong chuyen cau sau 1.5s
 class QuizOptionsList extends StatefulWidget {
   final List<QuizOptionDetail> optionDetails;
   final int correctIndex;
@@ -81,7 +81,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
           TweenSequenceItem(tween: Tween(begin: 1.08, end: 0.96), weight: 1),
           TweenSequenceItem(tween: Tween(begin: 0.96, end: 1.0), weight: 1),
         ]).animate(
-          CurvedAnimation(parent: _bounceController, curve: Curves.easeOutBack),
+          CurvedAnimation(parent: _bounceController, curve: Curves.easeOut),
         );
   }
 
@@ -94,13 +94,12 @@ class _QuizOptionsListState extends State<QuizOptionsList>
   }
 
   void _handleOptionTap(int index) {
-    if (widget.disabledIndices.contains(index)) return;
-    if (widget.correctSelectedIndex != null) return; // Đã trả lời đúng
+    if (widget.correctSelectedIndex != null) return; // Da tra loi dung
 
     final isCorrect = (index == widget.correctIndex);
 
     if (isCorrect) {
-      // CHỌN ĐÚNG:
+      // CHON DUNG:
       setState(() {
         _bouncingIndex = index;
         _shakingIndex = null;
@@ -109,7 +108,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
       _bounceController.forward(from: 0.0);
       widget.onSelectOption(index);
 
-      // Tự động chuyển sang câu tiếp theo sau 1.5 giây
+      // Tu dong chuyen sang cau tiep theo sau 1.5 giay
       _autoNextTimer?.cancel();
       _autoNextTimer = Timer(const Duration(milliseconds: 1500), () {
         if (mounted) {
@@ -121,10 +120,13 @@ class _QuizOptionsListState extends State<QuizOptionsList>
         }
       });
     } else {
-      // CHỌN SAI (Safe-to-Fail UX):
+      // CHON SAI (Khong khoa o; neu be chon lai van rung va nhac be):
+      final alreadyTried = widget.disabledIndices.contains(index);
       setState(() {
         _shakingIndex = index;
-        _mascotFeedbackMessage = 'Ối, thử ô khác xem sao! Bé làm được mà!';
+        _mascotFeedbackMessage = alreadyTried
+            ? 'Ô này chưa đúng đâu bé ơi, bé hãy thử chọn một đáp án khác nhé!'
+            : 'Ối, thử ô khác xem sao! Bé làm được mà!';
       });
       _shakeController.forward(from: 0.0);
       widget.onSelectOption(index);
@@ -153,34 +155,30 @@ class _QuizOptionsListState extends State<QuizOptionsList>
 
   Widget _buildOptionCard(int index) {
     final opt = widget.optionDetails[index];
-    final isDisabled = widget.disabledIndices.contains(index);
+    final isTriedWrong = widget.disabledIndices.contains(index);
     final isCorrect = (widget.correctSelectedIndex == index);
     final isShaking = (_shakingIndex == index);
     final isBouncing = (_bouncingIndex == index);
 
-    // Xác định màu sắc theo quy tắc Safe-to-Fail UX
+    // Xac dinh mau sac theo quy tac Safe-to-Fail UX (khong khoa o khi chon sai)
     Color backgroundColor;
     Color borderColor;
-    Color bevelColor;
     Color textColor;
 
     if (isCorrect) {
-      // Đúng: Xanh lá tươi rực rỡ
+      // Dung: Xanh la tuoi ruc ro
       backgroundColor = const Color(0xFFD1FAE5);
       borderColor = const Color(0xFF10B981);
-      bevelColor = const Color(0xFF059669);
       textColor = const Color(0xFF065F46);
-    } else if (isDisabled) {
-      // Sai: Cam nhạt/xám mờ nhẹ nhàng, không dùng đỏ đậm
+    } else if (isTriedWrong) {
+      // Da chon sai: Cam nhat nhe nhang, van mo de be co the bam lai
       backgroundColor = const Color(0xFFFFF7ED);
       borderColor = const Color(0xFFFED7AA);
-      bevelColor = const Color(0xFFFDBA74);
-      textColor = const Color(0xFF9CA3AF);
+      textColor = AppColors.onSurface;
     } else {
-      // Bình thường: Trắng kem với viền nổi 3D
+      // Binh thuong: Trang kem voi vien noi
       backgroundColor = AppColors.surfaceContainerLowest;
       borderColor = const Color(0xFFE2E8F0);
-      bevelColor = const Color(0xFFCBD5E1);
       textColor = AppColors.onSurface;
     }
 
@@ -195,7 +193,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
           BoxShadow(
             color: isCorrect
                 ? const Color(0x3510B981)
-                : (isDisabled ? Colors.transparent : const Color(0x10001050)),
+                : const Color(0x10001050),
             offset: const Offset(0, 4),
             blurRadius: isCorrect ? 10 : 0,
           ),
@@ -203,7 +201,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
       ),
       child: Row(
         children: [
-          // Huy hiệu ký tự (A, B, C, D)
+          // Huy hieu ben trai: Chi hien bieu tuong dung/sai hoac ky tu A, B, C, D o ben trai
           Container(
             width: 36,
             height: 36,
@@ -211,14 +209,14 @@ class _QuizOptionsListState extends State<QuizOptionsList>
               shape: BoxShape.circle,
               color: isCorrect
                   ? const Color(0xFF10B981)
-                  : (isDisabled
-                        ? const Color(0xFFE2E8F0)
+                  : (isTriedWrong
+                        ? const Color(0xFFFFEDD5)
                         : const Color(0xFFFEF3C7)),
               border: Border.all(
                 color: isCorrect
                     ? const Color(0xFF059669)
-                    : (isDisabled
-                          ? const Color(0xFFCBD5E1)
+                    : (isTriedWrong
+                          ? const Color(0xFFFB923C)
                           : const Color(0xFFF59E0B)),
                 width: 1.5,
               ),
@@ -230,10 +228,10 @@ class _QuizOptionsListState extends State<QuizOptionsList>
                       color: Colors.white,
                       size: 20,
                     )
-                  : (isDisabled
+                  : (isTriedWrong
                         ? const Icon(
                             Icons.close_rounded,
-                            color: Color(0xFF94A3B8),
+                            color: Color(0xFFEA580C),
                             size: 18,
                           )
                         : Text(
@@ -249,7 +247,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
 
           const SizedBox(width: 14),
 
-          // Nội dung chữ của đáp án (Căn giữa, tự co giãn theo chiều dài)
+          // Noi dung chu cua dap an (Can giua, tu co gian theo chieu dai)
           Expanded(
             child: Text(
               opt.title.replaceAll(RegExp(r'^[A-D]\.\s*'), ''),
@@ -263,30 +261,13 @@ class _QuizOptionsListState extends State<QuizOptionsList>
             ),
           ),
 
-          // Icon hiệu ứng khi đúng hoặc sai
-          if (isCorrect) ...[
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Color(0xFF10B981),
-              size: 24,
-            ),
-          ] else if (isDisabled) ...[
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.replay_rounded,
-              color: Color(0xFFFB923C),
-              size: 18,
-            ),
-          ] else ...[
-            const SizedBox(width: 8),
-            const SizedBox(width: 18), // Giữ cân đối căn lề giữa
-          ],
+          // Khoang trong ben phai de giu chu o chinh giua (da bo toan bo icon ben phai)
+          const SizedBox(width: 50),
         ],
       ),
     );
 
-    // Bọc hiệu ứng Rung Lắc Ngang (Shake) nếu chọn sai
+    // Boc hieu ung Rung Lac Ngang (Shake) neu chon sai
     if (isShaking) {
       cardContent = AnimatedBuilder(
         animation: _shakeAnimation,
@@ -300,7 +281,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
       );
     }
 
-    // Bọc hiệu ứng Nảy Lên (Bounce) nếu chọn đúng
+    // Boc hieu ung Nay Len (Bounce) neu chon dung
     if (isBouncing) {
       cardContent = AnimatedBuilder(
         animation: _bounceAnimation,
@@ -313,7 +294,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: isDisabled ? null : () => _handleOptionTap(index),
+      onTap: () => _handleOptionTap(index),
       child: cardContent,
     );
   }
@@ -369,7 +350,7 @@ class _QuizOptionsListState extends State<QuizOptionsList>
           ),
           if (isCorrect)
             const Text(
-              '1.5s ⏳',
+              '1.5s',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,

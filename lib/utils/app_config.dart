@@ -204,6 +204,9 @@ class AppConfig {
   /// 1. GET /api/story-template/{storyId}/quizzes (List all actived quizzes for story)
   static String storyQuizzesUrl(String storyId) => '$baseUrl/api/story-template/$storyId/quizzes';
 
+  /// 1b. GET /api/story-template/{storyId}/all-quizzes (List all quizzes for story)
+  static String storyAllQuizzesUrl(String storyId) => '$baseUrl/api/story-template/$storyId/all-quizzes';
+
   /// 2. GET /api/story-quizz/{id} / GET /api/story-quiz/{id} (Fetch single quiz details)
   static String storyQuizUrl(String id) => '$baseUrl/api/story-quizz/$id';
   static String storyQuizAltUrl(String id) => '$baseUrl/api/story-quiz/$id';
@@ -357,6 +360,14 @@ class AppConfig {
   static String resolveImageUrl(String? url) {
     if (url == null || url.trim().isEmpty) return '';
     final trimmed = url.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower == 'string' ||
+        lower == '/string' ||
+        lower.endsWith('/string') ||
+        lower.contains('swagger') ||
+        lower == 'null') {
+      return '';
+    }
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
     }
@@ -409,10 +420,14 @@ class AppConfig {
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   );
 
-  /// Validates if an ID is a valid GUID/UUID before sending to ASP.NET controllers
-  /// (avoids 400 Bad Request on Guid path params like /story-pages/{pageId}/slots)
-  static bool isValidUuid(String? id) =>
-      id != null && _uuidRegex.hasMatch(id.trim());
+  /// Validates if an ID is a valid non-empty GUID/UUID before sending to ASP.NET controllers
+  /// (avoids 400 Bad Request or 404 on Guid.Empty '00000000-0000-0000-0000-000000000000')
+  static bool isValidUuid(String? id) {
+    if (id == null) return false;
+    final trimmed = id.trim();
+    if (trimmed == '00000000-0000-0000-0000-000000000000') return false;
+    return _uuidRegex.hasMatch(trimmed);
+  }
 
   /// Extracts the User Id (Guid) from a JWT token payload
   static String? extractUserIdFromJwt(String? token) {

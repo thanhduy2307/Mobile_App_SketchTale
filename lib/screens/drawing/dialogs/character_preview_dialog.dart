@@ -5,7 +5,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/app_loading.dart';
 import '../drawing_styles.dart';
 
-/// 🎭 Pop-up xem trước bạn 3D, nghe giọng, đổi tên và bấm xác nhận gửi cho Ba Mẹ phê duyệt
+/// Pop-up xem truoc ban 3D, doi ten va bam xac nhan gui cho Ba Me phe duyet
 class CharacterPreviewDialog extends StatefulWidget {
   final GenerateCharacterResponse genResponse;
   final String originalDrawingUrl;
@@ -89,123 +89,44 @@ class _CharacterPreviewDialogState extends State<CharacterPreviewDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. Top bar: Pill badge & Close button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const SizedBox(width: 32),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: DrawingStyles.topPillBadgeDecoration,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.auto_awesome_rounded,
-                          color: AppColors.onPrimaryFixed,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Bạn 3D Của Bé Đã Xuất Hiện!',
-                          style: AppTypography.labelMd(color: AppColors.onPrimaryFixed),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.outline),
-                    onPressed: () => Navigator.of(context).pop(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    tooltip: 'Đóng',
-                  ),
-                ],
+              // 1. Nut Dong o goc tren ben phai
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.outline),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: 'Đóng',
+                ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
 
-              // 2. Status & Credit Balance Indicators
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: DrawingStyles.pendingBadgeDecoration,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.hourglass_top_rounded,
-                          size: 12,
-                          color: Color(0xFFB45309),
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Trạng thái: Chờ bé xác nhận',
-                          style: DrawingStyles.pendingBadgeText,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // 3. 3D Mascot Preview Image
+              // 2. 3D Mascot Preview Image
               Container(
                 width: double.infinity,
                 height: 185,
                 decoration: DrawingStyles.mascotPreviewBoxDecoration,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: widget.genResponse.generateImageUrl.isNotEmpty
-                          ? Image.network(
-                              widget.genResponse.generateImageUrl,
-                              fit: BoxFit.contain,
-                              loadingBuilder: appImageLoadingBuilder,
-                              errorBuilder: (_, _, _) => const Icon(
-                                Icons.broken_image_rounded,
-                                size: 70,
-                                color: AppColors.primaryContainer,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.image_not_supported_rounded,
+                child: Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: widget.genResponse.generateImageUrl.isNotEmpty
+                        ? Image.network(
+                            widget.genResponse.generateImageUrl,
+                            fit: BoxFit.contain,
+                            loadingBuilder: appImageLoadingBuilder,
+                            errorBuilder: (_, _, _) => const Icon(
+                              Icons.broken_image_rounded,
                               size: 70,
                               color: AppColors.primaryContainer,
                             ),
-                    ),
-                    // Voice Button
-                    Positioned(
-                      bottom: 8,
-                      right: 8,
-                      child: GestureDetector(
-                        onTap: widget.onPlayVoice,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                          )
+                        : const Icon(
+                            Icons.image_not_supported_rounded,
+                            size: 70,
+                            color: AppColors.primaryContainer,
                           ),
-                          decoration: DrawingStyles.voiceBtnDecoration,
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.volume_up_rounded,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                              SizedBox(width: 4),
-                              Text('Nghe giọng', style: DrawingStyles.voiceBtnText),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 12),

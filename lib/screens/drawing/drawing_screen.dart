@@ -13,9 +13,9 @@ export 'drawing_controller.dart';
 export 'drawing_styles.dart';
 export 'drawing_types.dart';
 
-/// 🎨 Màn hình Vẽ Tranh & Tạo Nhân Vật 3D (Clean View Component)
-/// Cấu trúc theo phong cách React JSX + CSS: View chỉ render bố cục giao diện,
-/// toàn bộ Logic nằm trong [DrawingController], Style nằm trong [DrawingStyles].
+/// Man hinh Ve Tranh & Tao Nhan Vat 3D (Clean View Component)
+/// Cau truc theo phong cach React JSX + CSS: View chi render bo cuc giao dien,
+/// toan bo Logic nam trong [DrawingController], Style nam trong [DrawingStyles].
 class DrawingScreen extends StatefulWidget {
   final AppState appState;
   final VoidCallback? onOpenCollection;
@@ -80,7 +80,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
     _showToast('Đang mở máy ảnh quét tranh giấy của bé...');
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) {
-        _showToast('Đã chụp xong bức tranh! Bút thần đang hóa phép...');
+        _showToast('Đã chụp xong bức tranh! Mèo Miu đang hóa phép...');
         _controller.startTransformWorkflow(
           context: context,
           appState: widget.appState,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/models.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/app_loading.dart';
+import '../../../widgets/character_cutout_image.dart';
 import '../role_assignment_styles.dart';
 
 /// The vi tri vai dien trong truyen
@@ -107,26 +107,18 @@ class RoleSlotCard extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: assignedCharacter!.avatar3dUrl.startsWith('assets/')
-                        ? Image.asset(
-                            assignedCharacter!.avatar3dUrl,
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.contain,
-                          )
-                        : Image.network(
-                            assignedCharacter!.avatar3dUrl,
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.cover,
-                            loadingBuilder: appImageLoadingBuilder,
-                            errorBuilder: (_, _, _) => Container(
-                              width: 64,
-                              height: 64,
-                              color: AppColors.primaryContainer,
-                              child: const Icon(Icons.cruelty_free_rounded, color: Colors.white),
-                            ),
-                          ),
+                    child: CharacterCutoutImage(
+                      imageUrl: assignedCharacter!.avatar3dUrl,
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.contain,
+                      errorFallbackBuilder: () => Container(
+                        width: 64,
+                        height: 64,
+                        color: AppColors.primaryContainer,
+                        child: const Icon(Icons.cruelty_free_rounded, color: Colors.white),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -187,22 +179,13 @@ class RoleSlotCard extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(14),
                       child: (roleTemplate != null && roleTemplate!.fullDefaultAssetUrl.isNotEmpty)
-                          ? (roleTemplate!.fullDefaultAssetUrl.startsWith('assets/')
-                              ? Image.asset(
-                                  roleTemplate!.fullDefaultAssetUrl,
-                                  width: 58,
-                                  height: 58,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (_, _, _) => _buildDefaultPlaceholder(),
-                                )
-                              : Image.network(
-                                  roleTemplate!.fullDefaultAssetUrl,
-                                  width: 58,
-                                  height: 58,
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: appImageLoadingBuilder,
-                                  errorBuilder: (_, _, _) => _buildDefaultPlaceholder(),
-                                ))
+                          ? CharacterCutoutImage(
+                              imageUrl: roleTemplate!.fullDefaultAssetUrl,
+                              width: 58,
+                              height: 58,
+                              fit: BoxFit.contain,
+                              errorFallbackBuilder: _buildDefaultPlaceholder,
+                            )
                           : _buildDefaultPlaceholder(),
                     ),
                     const SizedBox(width: 12),

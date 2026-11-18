@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 /// Result from UploadService
 class UploadResult {
@@ -24,7 +25,7 @@ class UploadResult {
 
 /// Service handling Media Uploads to Backend / Cloudinary (/api/upload/avatar)
 class UploadService {
-  static final http.Client _client = http.Client();
+  static final http.Client _client = ApiClient.instance;
 
   /// 4.2. Tải lên ảnh vẽ hoặc avatar nhân vật của bé
   /// POST /api/upload/avatar (Multipart Form-Data)
@@ -42,8 +43,9 @@ class UploadService {
 
       final request = http.MultipartRequest('POST', url);
       request.headers['Accept'] = 'application/json';
-      if (token != null && token.isNotEmpty) {
-        request.headers['Authorization'] = 'Bearer $token';
+      final effectiveToken = token ?? ApiClient.instance.currentToken;
+      if (effectiveToken != null && effectiveToken.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $effectiveToken';
       }
 
       final multipartFile = http.MultipartFile.fromBytes(
@@ -54,7 +56,28 @@ class UploadService {
       request.files.add(multipartFile);
 
       final streamedResponse = await _client.send(request).timeout(const Duration(seconds: 25));
-      final response = await http.Response.fromStream(streamedResponse);
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 401) {
+        if (kDebugMode) {
+          debugPrint('[UploadService] 401 Unauthorized. Dang lam moi token va retry upload...');
+        }
+        final newToken = await ApiClient.instance.refreshToken();
+        if (newToken != null && newToken.isNotEmpty) {
+          final retryRequest = http.MultipartRequest('POST', url);
+          retryRequest.headers['Accept'] = 'application/json';
+          retryRequest.headers['Authorization'] = 'Bearer $newToken';
+          retryRequest.files.add(
+            http.MultipartFile.fromBytes(
+              'file',
+              bytes,
+              filename: fileName,
+            ),
+          );
+          final retryStreamed = await _client.send(retryRequest).timeout(const Duration(seconds: 25));
+          response = await http.Response.fromStream(retryStreamed);
+        }
+      }
 
       if (kDebugMode) {
         debugPrint('[UploadService] Upload response status: ${response.statusCode}');

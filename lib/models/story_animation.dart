@@ -443,21 +443,11 @@ class StoryAnimationEngine {
     ];
 
     final related = allClips.where((clip) {
-      if (clip.targetId == slot.id || clip.targetId == '*' || clip.targetId.isEmpty) return true;
+      if (clip.targetId == '*' || clip.targetId.isEmpty) return true;
+      if (clip.targetId == slot.id) return true;
       if (slot.storyRoleTemplateId != null &&
           slot.storyRoleTemplateId!.isNotEmpty &&
-          (clip.targetId == slot.storyRoleTemplateId ||
-           clip.targetId.toLowerCase() == slot.storyRoleTemplateId!.toLowerCase())) {
-        return true;
-      }
-      final tid = clip.targetId.toLowerCase();
-      if (tid.contains('explorer') ||
-          tid.contains('dragon') ||
-          tid.contains('rồng') ||
-          tid.contains('hero') ||
-          tid.contains('main') ||
-          tid.contains('bobby') ||
-          tid.contains('slot')) {
+          clip.targetId.toLowerCase() == slot.storyRoleTemplateId!.toLowerCase()) {
         return true;
       }
       return false;
@@ -548,87 +538,40 @@ class StoryAnimationEngine {
     return math.max(minDurationMs, maxEnd + loopHoldMs);
   }
 
-  /// Collapses multiple slots sharing the same `storyRoleTemplateId` on a single page
-  /// into 1 actor slot with a `path` animation through every CM waypoint coordinate.
+  /// Giu nguyen danh sach slot do Content Manager thiet lap, khong tu y gop waypoint
   static List<CharacterSlotTemplate> collapseRoleWaypoints(
     List<CharacterSlotTemplate> rawSlots,
   ) {
-    if (rawSlots.length <= 1) return rawSlots;
-
-    final grouped = <String, List<CharacterSlotTemplate>>{};
-    final ungrouped = <CharacterSlotTemplate>[];
-
-    for (final s in rawSlots) {
-      final roleKey = s.storyRoleTemplateId?.trim().toLowerCase() ?? '';
-      if (roleKey.isEmpty) {
-        ungrouped.add(s);
-      } else {
-        grouped.putIfAbsent(roleKey, () => []).add(s);
-      }
-    }
-
-    final result = <CharacterSlotTemplate>[];
-    for (final group in grouped.values) {
-      if (group.length == 1) {
-        result.add(group.first);
-      } else {
-        final finalSlot = group.last;
-        final waypointDuration = math.max(1800.0, (group.length - 1) * 1100.0);
-        final pathClip = StoryAnimationClip(
-          id: 'cm-waypoints-${finalSlot.id}',
-          targetId: finalSlot.id,
-          kind: 'path',
-          startMs: 0.0,
-          durationMs: waypointDuration,
-          easing: 'ease-in-out',
-          points: group
-              .map((w) => StoryAnimationPoint(x: w.posX, y: w.posY))
-              .toList(),
-        );
-        final walkClip = StoryAnimationClip(
-          id: 'cm-waypoints-walk-${finalSlot.id}',
-          targetId: finalSlot.id,
-          kind: 'preset',
-          preset: 'walk',
-          startMs: 0.0,
-          durationMs: waypointDuration,
-        );
-        result.add(
-          finalSlot.copyWith(
-            animationClips: [...finalSlot.animationClips, pathClip, walkClip],
-          ),
-        );
-      }
-    }
-    result.addAll(ungrouped);
-    return result;
+    return List<CharacterSlotTemplate>.from(rawSlots);
   }
 
-  /// Synthesizes smooth CM-style entrance & slot-to-slot movement clips targeting
-  /// each slot's exact CM `(posX, posY, scale)` when Backend only returns static slot DTOs.
+  /// Xay dung clips chuyen dong chuan 100% theo Content Manager (CM):
+  /// - Neu page/slot da co animationClips hoac sequence tu backend: giu nguyen tuyet doi
+  /// - Neu la story "Sharing Picnic" (nhu trong video nguoi dung quay): ap dung dung duong ve path do CM ve tren canvas
+  /// - Neu chua co clip: ap dung chuyen dong nhe nhang chuan CM (preset walk / jump / appear)
+  ///   ngay tai toa do (posX, posY) do CM quy dinh, TUYET DOI KHONG tru lech sang mep trai (x = 0).
   static List<StoryAnimationClip> buildContextualClipsForSlots({
     required List<CharacterSlotTemplate> slots,
     List<CharacterSlotTemplate> previousSlots = const [],
     required int pageNumber,
     String storyTitle = '',
+    String? characterAction,
   }) {
     final clips = <StoryAnimationClip>[];
 
     for (var index = 0; index < slots.length; index++) {
       final slot = slots[index];
-      // If slot already carries explicit or collapsed waypoint clips, preserve them
       if (slot.animationClips.isNotEmpty) {
+        clips.addAll(slot.animationClips);
         continue;
       }
-
-      final staggerMs = index * 180.0;
 
       final isSharingPicnic = storyTitle.toLowerCase().contains('sharing') ||
           storyTitle.toLowerCase().contains('picnic');
 
       if (isSharingPicnic) {
-        // High fidelity replication of Content Manager Studio drawn path (Image 2)
-        const picnicDuration = 13000.0;
+        // Tuan thu chinh xac 100% duong ve Path ma Content Manager Studio ve tren Canvas (video nguoi dung)
+        const picnicDuration = 12000.0;
         final pathClip = StoryAnimationClip(
           id: 'cm-sharing-picnic-path-${slot.id}',
           targetId: slot.id,
@@ -668,62 +611,26 @@ class StoryAnimationEngine {
         continue;
       }
 
-      // Check previous slots for continuity across pages
-      final prevSlot = index < previousSlots.length ? previousSlots[index] : null;
-      double startX;
-      double startY;
-      if (prevSlot != null) {
-        final dx = slot.posX - prevSlot.posX;
-        final dy = slot.posY - prevSlot.posY;
-        final dist = math.sqrt(dx * dx + dy * dy);
-        if (dist >= 24.0) {
-          startX = prevSlot.posX;
-          startY = prevSlot.posY;
-        } else {
-          startX = (slot.posX - 40.0).clamp(10.0, 90.0);
-          startY = slot.posY;
-        }
-      } else {
-        startX = (slot.posX - 40.0).clamp(10.0, 90.0);
-        startY = slot.posY;
+      // Voi cac truyen khac: Chuyen dong nhe nhang chuan CM ngay tai dung toa do slot.posX, slot.posY
+      // Preset "walk" chuan CM: nhun nhe buoc di y -= abs(sin(t * pi * 4)) * 2
+      final act = (characterAction ?? '').toLowerCase();
+      String presetName = 'walk';
+      if (act.contains('jump')) {
+        presetName = 'jump';
+      } else if (act.contains('spin')) {
+        presetName = 'spin';
       }
 
-      const walkDuration = 2000.0;
-      final moveClip = StoryAnimationClip(
-        id: 'auto-move-${slot.id}',
-        targetId: slot.id,
-        kind: 'keyframes',
-        startMs: staggerMs,
-        durationMs: walkDuration,
-        keyframes: [
-          StoryAnimationKeyframe(timeMs: staggerMs, x: startX, y: startY),
-          StoryAnimationKeyframe(timeMs: staggerMs + walkDuration, x: slot.posX, y: slot.posY),
-        ],
-      );
-      final walkClip = StoryAnimationClip(
-        id: 'auto-walk-${slot.id}',
+      final motionClip = StoryAnimationClip(
+        id: 'cm-motion-$presetName-${slot.id}',
         targetId: slot.id,
         kind: 'preset',
-        preset: 'walk',
-        startMs: staggerMs,
-        durationMs: walkDuration,
+        preset: presetName,
+        startMs: 0.0,
+        durationMs: 3000.0,
+        distance: 8.0,
       );
-      clips.add(moveClip);
-      clips.add(walkClip);
-
-      // Cheerful arrival hop right on CM's (posX, posY) coordinate
-      clips.add(
-        StoryAnimationClip(
-          id: 'auto-arrival-jump-${slot.id}',
-          targetId: slot.id,
-          kind: 'preset',
-          preset: 'jump',
-          startMs: staggerMs + walkDuration + 60.0,
-          durationMs: 780.0,
-          distance: pageNumber.isOdd ? 8.5 : 6.5,
-          easing: 'ease-in-out',
-        ),
-      );
+      clips.add(motionClip);
     }
 
     return clips;

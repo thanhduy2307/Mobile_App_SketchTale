@@ -4,8 +4,8 @@ import '../../../models/models.dart';
 import '../../../theme/app_theme.dart';
 import '../drawing_styles.dart';
 
-/// 🤔 Dialog Giai đoạn 1 Dự phòng: Khi AI chưa nhận diện được rõ nét vẽ
-/// Cho bé chọn cách 1 (Vẽ lại nét rõ hơn) hoặc cách 2 (Nói/Gõ ý tưởng + tự chọn loại nhân vật).
+/// Dialog Giai doan 1 Du phong: Khi AI chua nhan dien duoc ro net ve
+/// Cho be chon cach 1 (Ve lai net ro hon) hoac cach 2 (Noi/Go y tuong + tu chon loai nhan vat).
 class AiFallbackDialog extends StatefulWidget {
   final AnalyzeDrawingResponse analyzeData;
   final List<CharType> availableCharTypes;
@@ -91,7 +91,7 @@ class _AiFallbackDialogState extends State<AiFallbackDialog> {
                         ),
                         SizedBox(width: 6),
                         Text(
-                          'Bút Thần Chưa Nhìn Rõ Nét Vẽ Này Rùi',
+                          'Mèo Miu Chưa Nhìn Rõ Nét Vẽ Này Rùi',
                           style: DrawingStyles.pendingBadgeText,
                         ),
                       ],

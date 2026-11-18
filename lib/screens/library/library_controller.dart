@@ -59,8 +59,9 @@ class LibraryController extends ChangeNotifier {
   void openStoryFromTemplate(
     BuildContext context,
     AppState appState,
-    StoryTemplate template,
-  ) {
+    StoryTemplate template, {
+    bool isOriginalTemplate = true,
+  }) {
     if (isOpeningStory) return;
     isOpeningStory = true;
     notifyListeners();
@@ -77,7 +78,11 @@ class LibraryController extends ChangeNotifier {
         .push(
           MaterialPageRoute(
             builder: (_) =>
-                StoryPlayerScreen(appState: appState, story: story),
+                StoryPlayerScreen(
+                  appState: appState,
+                  story: story,
+                  isOriginalTemplate: isOriginalTemplate,
+                ),
           ),
         )
         .then((_) {

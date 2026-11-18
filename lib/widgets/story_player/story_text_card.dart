@@ -60,7 +60,12 @@ List<StoryParagraphTokens> parseStoryWordTokens(String fullText) {
       intermediate.add([]);
       continue;
     }
-    final rawWords = p.split(RegExp(r'\s+'));
+    // Dam bao dau cau dinh sat tu (vi du ",Tu" hoac "mam,Tu") duoc tach khoang trang hop ly
+    final normalizedParagraph = p.replaceAllMapped(
+      RegExp(r'([.,!?:;])(?=\S)'),
+      (m) => '${m.group(1)} ',
+    );
+    final rawWords = normalizedParagraph.split(RegExp(r'\s+'));
     final List<Map<String, dynamic>> pWords = [];
     for (int i = 0; i < rawWords.length; i++) {
       final w = rawWords[i];
@@ -159,9 +164,6 @@ class _StoryTextCardState extends State<StoryTextCard>
   String? _cachedRawText;
   List<StoryParagraphTokens> _cachedParagraphs = const [];
 
-  String? _cachedEnglishText;
-  List<StoryParagraphTokens> _cachedEnglishParagraphs = const [];
-
   late final AnimationController _mascotController;
   late final Animation<double> _mascotFloatAnimation;
   bool _isMascotJumping = false;
@@ -195,15 +197,6 @@ class _StoryTextCardState extends State<StoryTextCard>
     _cachedRawText = text;
     _cachedParagraphs = parseStoryWordTokens(text);
     return _cachedParagraphs;
-  }
-
-  List<StoryParagraphTokens> _getEnglishParagraphs(String text) {
-    if (_cachedEnglishText == text && _cachedEnglishParagraphs.isNotEmpty) {
-      return _cachedEnglishParagraphs;
-    }
-    _cachedEnglishText = text;
-    _cachedEnglishParagraphs = parseStoryWordTokens(text);
-    return _cachedEnglishParagraphs;
   }
 
   /// Chuẩn hóa từ để so khớp chính xác: loại bỏ dấu câu, chữ thường
@@ -321,10 +314,15 @@ class _StoryTextCardState extends State<StoryTextCard>
     final bool isReadAlongActive = hasValidDuration &&
         (widget.isPlayingAudio || (pos > Duration.zero && progress < 0.99));
 
+    final cleanContent = widget.textContent.trim();
+    final bool hasValidText = cleanContent.isNotEmpty &&
+        cleanContent.toLowerCase() != 'string' &&
+        cleanContent.toLowerCase() != 'null';
+
     final paragraphs = _getParagraphs(
-      widget.textContent.isNotEmpty
-          ? widget.textContent
-          : 'Ngày xửa ngày xưa, trong một khu rừng tuyệt đẹp...',
+      hasValidText
+          ? cleanContent
+          : 'Ngày xửa ngày xưa, trong một thế giới thần tiên rực rỡ, các bạn nhỏ cùng nhau khám phá một câu chuyện diệu kỳ và đầy ắp niềm vui...',
     );
 
     return Container(
@@ -351,11 +349,12 @@ class _StoryTextCardState extends State<StoryTextCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Voice Teller Banner & Font Zoom Toggle
+          // 1. Header Goc Doc Truyen & Font Zoom Toggle
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     width: 32,
@@ -368,30 +367,30 @@ class _StoryTextCardState extends State<StoryTextCard>
                       border: Border.all(
                         color: isReadAlongActive
                             ? const Color(0xFFF59E0B)
-                            : AppColors.outline,
+                            : const Color(0xFFFCD34D),
                       ),
                     ),
                     child: Icon(
-                      Icons.record_voice_over_rounded,
-                      size: 18,
+                      Icons.auto_stories_rounded,
+                      size: 17,
                       color: isReadAlongActive
                           ? const Color(0xFFB45309)
                           : const Color(0xFF8A5A00),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'Người kể: ${widget.narratorName}',
-                    style: const TextStyle(
+                  const Text(
+                    'Góc Đọc Truyện Của Bé',
+                    style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.onSurface,
                     ),
                   ),
                 ],
               ),
-              // Font size adjustment for kid reading comfort
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
                     onTap: () {
@@ -487,12 +486,13 @@ class _StoryTextCardState extends State<StoryTextCard>
                               (progress < seg.endPct || isLastSegment);
                           final bool isPast = isReadAlongActive && progress >= seg.endPct;
 
-                          // Nếu từ này là từ vựng CM: Render dạng Badge tương tác có thể bấm
+                          // Neu tu nay la tu vung CM: Render highlight nhe nhang, khong icon ruom ra
                           if (seg.isVocab) {
                             return TextSpan(
                               children: [
                                 WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
+                                  alignment: PlaceholderAlignment.baseline,
+                                  baseline: TextBaseline.alphabetic,
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: () {
@@ -500,62 +500,25 @@ class _StoryTextCardState extends State<StoryTextCard>
                                         widget.onVocabTap!(seg.vocab!);
                                       }
                                     },
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 250),
-                                      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                       decoration: BoxDecoration(
                                         color: isHighlightActive
-                                            ? const Color(0xFFFDE047) // Sáng rực rỡ khi narrator đang đọc đến
-                                            : const Color(0xFFFEF3C7), // Vàng ấm pastel nổi bật sẵn để bé nhận biết
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: isHighlightActive
-                                              ? const Color(0xFFD97706)
-                                              : const Color(0xFFF59E0B),
-                                          width: isHighlightActive ? 2.0 : 1.4,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: isHighlightActive
-                                                ? const Color(0x35F59E0B)
-                                                : const Color(0x18000000),
-                                            offset: const Offset(0, 2),
-                                            blurRadius: isHighlightActive ? 6 : 2,
-                                          ),
-                                        ],
+                                            ? const Color(0xFFFDE68A)
+                                            : const Color(0xFFFEF3C7).withValues(alpha: 0.75),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.menu_book_rounded,
-                                            size: 13,
-                                            color: isHighlightActive
-                                                ? const Color(0xFF78350F)
-                                                : const Color(0xFFB45309),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            seg.text,
-                                            style: TextStyle(
-                                              fontSize: baseFontSize,
-                                              height: 1.25,
-                                              fontWeight: FontWeight.w900,
-                                              color: const Color(0xFF78350F),
-                                              decoration: TextDecoration.underline,
-                                              decorationColor: const Color(0xFFD97706),
-                                              decorationStyle: TextDecorationStyle.dotted,
-                                              decorationThickness: 1.6,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 3),
-                                          const Icon(
-                                            Icons.touch_app_rounded,
-                                            size: 11,
-                                            color: Color(0xFFD97706),
-                                          ),
-                                        ],
+                                      child: Text(
+                                        seg.text,
+                                        style: TextStyle(
+                                          fontSize: baseFontSize,
+                                          height: 1.35,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF92400E),
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: const Color(0xFFD97706).withValues(alpha: 0.6),
+                                          decorationThickness: 1.2,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -618,98 +581,7 @@ class _StoryTextCardState extends State<StoryTextCard>
             ],
           ),
 
-          // 4. Optional English Subtitle with Synchronized Read-Along Highlight
-          if (widget.showEnglish &&
-              widget.englishSubtitle != null &&
-              widget.englishSubtitle!.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Builder(
-              builder: (context) {
-                final engParagraphs = _getEnglishParagraphs(widget.englishSubtitle!);
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.translate_rounded, color: Color(0xFF16A34A), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (int epIdx = 0; epIdx < engParagraphs.length; epIdx++) ...[
-                              if (epIdx > 0) const SizedBox(height: 6),
-                              Text.rich(
-                                TextSpan(
-                                  children: engParagraphs[epIdx].words.map((token) {
-                                    final bool isLastWord =
-                                        (epIdx == engParagraphs.length - 1) &&
-                                        (token == engParagraphs[epIdx].words.last);
-                                    final bool isHighlightActive = isReadAlongActive &&
-                                        progress >= token.startPct &&
-                                        (progress < token.endPct || isLastWord);
-                                    final bool isPast = isReadAlongActive && progress >= token.endPct;
-
-                                    TextStyle spanStyle;
-                                    if (isHighlightActive) {
-                                      spanStyle = const TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 14,
-                                        height: 1.45,
-                                        fontWeight: FontWeight.w900,
-                                        color: Color(0xFF14532D),
-                                        backgroundColor: Color(0xFFBBF7D0),
-                                      );
-                                    } else if (isPast) {
-                                      spanStyle = const TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 14,
-                                        height: 1.45,
-                                        fontWeight: FontWeight.w700,
-                                        color: Color(0xFF15803D),
-                                      );
-                                    } else if (isReadAlongActive) {
-                                      spanStyle = TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 14,
-                                        height: 1.45,
-                                        fontWeight: FontWeight.w600,
-                                        color: const Color(0xFF15803D).withValues(alpha: 0.60),
-                                      );
-                                    } else {
-                                      spanStyle = const TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 14,
-                                        height: 1.45,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF15803D),
-                                      );
-                                    }
-
-                                    return TextSpan(
-                                      text: '${token.text}${token.trailingSpace}',
-                                      style: spanStyle,
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-
-          // 5. Linh Vật Ở Góc Phải Đồng Hành & Nhắc Bé Đọc Từ Vựng
+          // 4. Linh Vat O Goc Phai Dong Hanh & Nhac Be Doc Tu Vung
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerRight,
@@ -720,7 +592,7 @@ class _StoryTextCardState extends State<StoryTextCard>
     );
   }
 
-  /// Linh vật SketchTale hoạt họa ở góc phải với bóng thoại nhắc nhở
+  /// Linh vat SketchTale hoat hoa o goc phai voi bong thoai nhac nho
   Widget _buildMascotReminder() {
     return AnimatedBuilder(
       animation: _mascotFloatAnimation,
@@ -730,7 +602,7 @@ class _StoryTextCardState extends State<StoryTextCard>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // Bong bóng lời thoại của linh vật
+            // Bong bong loi thoai cua linh vat
             GestureDetector(
               onTap: _triggerMascotJump,
               child: Container(
@@ -760,25 +632,14 @@ class _StoryTextCardState extends State<StoryTextCard>
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.auto_awesome_rounded,
-                      size: 14,
-                      color: Color(0xFFD97706),
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'Bé đừng quên đọc từ vựng nhé!',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF92400E),
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
+                child: const Text(
+                  'Bé đừng quên đọc từ vựng nhé!',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF92400E),
+                    letterSpacing: 0.1,
+                  ),
                 ),
               ),
             ),

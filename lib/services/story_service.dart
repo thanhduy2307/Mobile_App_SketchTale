@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 class StoryDataResult {
   final List<EducationTheme> themes;
@@ -19,7 +20,7 @@ class StoryDataResult {
 }
 
 class StoryService {
-  static final http.Client _client = http.Client();
+  static final http.Client _client = ApiClient.instance;
 
   /// Fetches all Education Themes from GET /api/education-themes
   static Future<List<EducationTheme>> fetchEducationThemes({String? token}) async {
@@ -46,9 +47,13 @@ class StoryService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          return decoded
-              .map((item) => EducationTheme.fromJson(item as Map<String, dynamic>))
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null) {
+          return list
+              .whereType<Map>()
+              .map((item) => EducationTheme.fromJson(Map<String, dynamic>.from(item)))
               .toList();
         }
       }
@@ -88,13 +93,17 @@ class StoryService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List && decoded.isNotEmpty) {
-          return decoded.map((item) {
-            return StoryTemplate.fromJson(
-              item as Map<String, dynamic>,
-              themesMap: themesMap,
-            );
-          }).toList();
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null && list.isNotEmpty) {
+          return list
+              .whereType<Map>()
+              .map((item) => StoryTemplate.fromJson(
+                    Map<String, dynamic>.from(item),
+                    themesMap: themesMap,
+                  ))
+              .toList();
         }
       }
     } catch (e) {
@@ -136,13 +145,17 @@ class StoryService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List && decoded.isNotEmpty) {
-          return decoded.map((item) {
-            return StoryTemplate.fromJson(
-              item as Map<String, dynamic>,
-              themesMap: themesMap,
-            );
-          }).toList();
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null && list.isNotEmpty) {
+          return list
+              .whereType<Map>()
+              .map((item) => StoryTemplate.fromJson(
+                    Map<String, dynamic>.from(item),
+                    themesMap: themesMap,
+                  ))
+              .toList();
         }
       }
     } catch (e) {
@@ -210,6 +223,24 @@ class StoryService {
       headers['Authorization'] = 'Bearer $token';
     }
 
+    List<StoryTemplatePage> parsePages(dynamic body) {
+      try {
+        final decoded = jsonDecode(body.toString());
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null && list.isNotEmpty) {
+          final pages = list
+              .whereType<Map>()
+              .map((item) => StoryTemplatePage.fromJson(Map<String, dynamic>.from(item)))
+              .toList();
+          pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+          return pages;
+        }
+      } catch (_) {}
+      return const [];
+    }
+
     // 1. Primary endpoint: GET /api/storypage-template/pages/{storyId}
     final pagesUrl = Uri.parse(AppConfig.storyTemplatePagesUrl(cleanId));
     try {
@@ -226,14 +257,8 @@ class StoryService {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is List && decoded.isNotEmpty) {
-          final pages = decoded
-              .map((item) => StoryTemplatePage.fromJson(item as Map<String, dynamic>))
-              .toList();
-          pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-          return pages;
-        }
+        final pages = parsePages(response.body);
+        if (pages.isNotEmpty) return pages;
       }
     } catch (e) {
       if (kDebugMode) {
@@ -241,32 +266,29 @@ class StoryService {
       }
     }
 
-    // 2. Secondary endpoint for ContentManager: GET /api/storypage-template/all-pages/{storyId}
-    if (isContentManager && token != null && token.isNotEmpty) {
-      final allPagesUrl = Uri.parse(AppConfig.storyTemplateAllPagesUrl(cleanId));
-      try {
-        if (kDebugMode) {
-          debugPrint('[StoryService] GET $allPagesUrl (ContentManager)');
-        }
+    // 2. Secondary endpoint: GET /api/storypage-template/all-pages/{storyId}
+    // Giai quyet van de xung dot route ASP.NET Core hoac role
+    final allPagesUrl = Uri.parse(AppConfig.storyTemplateAllPagesUrl(cleanId));
+    try {
+      if (kDebugMode) {
+        debugPrint('[StoryService] GET $allPagesUrl (Fallback)');
+      }
 
-        final response = await _client.get(allPagesUrl, headers: headers).timeout(
-              const Duration(seconds: 10),
-            );
+      final response = await _client.get(allPagesUrl, headers: headers).timeout(
+            const Duration(seconds: 12),
+          );
 
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          final decoded = jsonDecode(response.body);
-          if (decoded is List && decoded.isNotEmpty) {
-            final pages = decoded
-                .map((item) => StoryTemplatePage.fromJson(item as Map<String, dynamic>))
-                .toList();
-            pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-            return pages;
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[StoryService] Error fetching all-pages from $allPagesUrl: $e');
-        }
+      if (kDebugMode) {
+        debugPrint('[StoryService] AllPages response code: ${response.statusCode}');
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final pages = parsePages(response.body);
+        if (pages.isNotEmpty) return pages;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StoryService] Error fetching all-pages from $allPagesUrl: $e');
       }
     }
 
@@ -303,10 +325,13 @@ class StoryService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          return decoded
-              .whereType<Map<String, dynamic>>()
-              .map((item) => StoryRoleTemplate.fromJson(item))
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null) {
+          return list
+              .whereType<Map>()
+              .map((item) => StoryRoleTemplate.fromJson(Map<String, dynamic>.from(item)))
               .toList();
         }
       }
@@ -338,6 +363,23 @@ class StoryService {
       headers['Authorization'] = 'Bearer $token';
     }
 
+    List<StoryRoleTemplate> parseRoles(dynamic body) {
+      try {
+        final decoded = jsonDecode(body.toString());
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null && list.isNotEmpty) {
+          return list
+              .whereType<Map>()
+              .map((item) => StoryRoleTemplate.fromJson(Map<String, dynamic>.from(item)))
+              .toList();
+        }
+      } catch (_) {}
+      return const [];
+    }
+
+    // 1. Primary: GET /api/story-template/{storyId}/roles
     try {
       if (kDebugMode) {
         debugPrint('[StoryService] GET $url');
@@ -352,18 +394,29 @@ class StoryService {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is List && decoded.isNotEmpty) {
-          return decoded
-              .map((item) => StoryRoleTemplate.fromJson(item as Map<String, dynamic>))
-              .toList();
-        }
+        final roles = parseRoles(response.body);
+        if (roles.isNotEmpty) return roles;
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[StoryService] Error fetching roles for $storyId: $e');
       }
     }
+
+    // 2. Fallback: GET /api/story-template/{storyId}/all-roles
+    final allRolesUrl = Uri.parse(AppConfig.storyAllRolesUrl(storyId));
+    try {
+      if (kDebugMode) {
+        debugPrint('[StoryService] GET $allRolesUrl (Fallback)');
+      }
+      final response = await _client.get(allRolesUrl, headers: headers).timeout(
+            const Duration(seconds: 10),
+          );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final roles = parseRoles(response.body);
+        if (roles.isNotEmpty) return roles;
+      }
+    } catch (_) {}
 
     return const [];
   }
@@ -642,9 +695,13 @@ class StoryService {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          final parsed = decoded
-              .map((item) => CharacterSlotTemplate.fromJson(item as Map<String, dynamic>))
+        final list = (decoded is Map<String, dynamic> && decoded['data'] is List)
+            ? decoded['data'] as List
+            : (decoded is List ? decoded : null);
+        if (list != null) {
+          final parsed = list
+              .whereType<Map>()
+              .map((item) => CharacterSlotTemplate.fromJson(Map<String, dynamic>.from(item)))
               .toList();
           return parsed;
         }

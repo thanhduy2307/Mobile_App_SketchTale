@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/models.dart';
@@ -16,15 +17,16 @@ import '../../widgets/story_player/story_canvas_view.dart';
 import '../../widgets/story_player/story_firefly_painter.dart';
 import '../../widgets/story_player/story_tab_bar.dart';
 
-/// 🧠 Controller Quản Lý Logic Đọc Truyện Tương Tác (StoryPlayerController)
-/// Tương đương React Hook `useStoryPlayer`:
-/// Quản lý âm thanh Audio, Trục thời gian chuyển động CM, Chuyển trang,
-/// Gán vai nhân vật, Đố vui (Quiz) & Học từ vựng (Vocabulary).
+/// Controller Quan Ly Logic Doc Truyen Tuong Tac (StoryPlayerController)
+/// Tuong duong React Hook `useStoryPlayer`:
+/// Quan ly am thanh Audio, Truc thoi gian chuyen dong CM, Chuyen trang,
+/// Gan vai nhan vat, Do vui (Quiz) & Hoc tu vung (Vocabulary).
 class StoryPlayerController extends ChangeNotifier {
   final TickerProvider vsync;
   final Story story;
   final AppState appState;
   final String? readingLogId;
+  bool isOriginalTemplate;
 
   // Trạng thái trang và giao diện
   int currentPageIndex = 0;
@@ -44,7 +46,6 @@ class StoryPlayerController extends ChangeNotifier {
   Timer? _lastPageAudioTimer;
 
   // Animation & Timeline
-  late AnimationController _sparkleController;
   AnimationController? _playheadController;
   double animationDurationMs = 4200.0;
   final List<FireflyParticle> particles = [];
@@ -88,6 +89,8 @@ class StoryPlayerController extends ChangeNotifier {
   DateTime tabQuizStartTime = DateTime.now();
   DateTime storySessionStartTime = DateTime.now();
   String? activeReadingLogId;
+  Future<ReadingLogSession?>? _startSessionFuture;
+  bool isReadingSessionCompleted = false;
 
   // Roles & Mappings
   List<StoryRoleTemplate> storyRoles = [];
@@ -98,6 +101,7 @@ class StoryPlayerController extends ChangeNotifier {
     required this.story,
     required this.appState,
     this.readingLogId,
+    this.isOriginalTemplate = false,
   });
 
   AnimationController get playhead =>
@@ -112,11 +116,27 @@ class StoryPlayerController extends ChangeNotifier {
 
   double get playheadMs => playhead.value * animationDurationMs;
 
+  bool get _needsBackendPagesLoad =>
+      story.id.isNotEmpty &&
+      (pages.isEmpty ||
+          pages.length < story.totalPages ||
+          pages.any(
+            (p) =>
+                p.id == null ||
+                !AppConfig.isValidUuid(p.id) ||
+                p.id!.startsWith('local-page-') ||
+                p.id!.contains('fallback-page') ||
+                p.textContent.trim().toLowerCase() == 'string' ||
+                p.imageUrl.trim().toLowerCase() == 'string' ||
+                p.imageUrl.endsWith('/string') ||
+                p.imageUrl.isEmpty,
+          ));
+
   void initialize() {
-    // Khởi tạo playhead controller
+    // Khoi tao playhead controller
     playhead;
 
-    // Lắng nghe audio
+    // Lang nghe audio
     audioService.initialize();
     _audioPosSub = audioService.onPositionChanged.listen((pos) {
       audioPosition = pos;
@@ -139,35 +159,24 @@ class StoryPlayerController extends ChangeNotifier {
     quizTemplates = List<StoryQuizTemplate>.from(story.quizTemplates);
     storyQuizzes = List<QuizQuestion>.from(story.allQuizzes);
     tabQuizStartTime = DateTime.now();
+    storySessionStartTime = DateTime.now();
 
-    final needLoad = story.id.isNotEmpty &&
-        (pages.isEmpty ||
-            pages.length < story.totalPages ||
-            pages.any((p) => p.id == null || p.id!.startsWith('local-page-')));
+    final needLoad = _needsBackendPagesLoad;
     isLoadingPages = needLoad;
 
+    // Bat dau phien doc truyen POST /api/reading-logs ngay lap tuc
+    _startSessionFuture = startReadingSession();
+
     loadStoryRolesAndMappings();
-    preloadAllStoryVocabularies();
     preloadStoryQuizzesAndReadingLog();
     ensureStoryPagesLoaded();
 
-    if (pages.isNotEmpty) {
+    if (!needLoad && pages.isNotEmpty) {
       currentPageIndex = (story.currentPage - 1).clamp(0, pages.length - 1);
       syncActionForCurrentPage(pages[currentPageIndex], fromInitState: true);
+      preloadAllStoryVocabularies();
     }
 
-    _sparkleController = AnimationController(
-      vsync: vsync,
-      duration: const Duration(milliseconds: 1400),
-    )..addListener(() {
-        for (final p in particles) {
-          p.update();
-        }
-        particles.removeWhere((p) => p.life <= 0);
-        notifyListeners();
-      });
-    _sparkleController.repeat();
-    spawnFireflies();
   }
 
   void startTimelineLoop() {
@@ -229,33 +238,13 @@ class StoryPlayerController extends ChangeNotifier {
   }
 
   void spawnFireflies() {
-    final random = Random();
-    for (int i = 0; i < 6; i++) {
-      particles.add(
-        FireflyParticle(
-          x: 20 + random.nextDouble() * 320,
-          y: 20 + random.nextDouble() * 180,
-          vx: (random.nextDouble() - 0.5) * 1.5,
-          vy: (random.nextDouble() - 0.5) * 1.5,
-          color: const Color(0xFFFBBF24),
-          maxLife: (40 + random.nextInt(30)).toDouble(),
-        ),
-      );
-    }
-    notifyListeners();
+    // Da bo hieu ung dom dom bay theo yeu cau
+    particles.clear();
   }
 
   void triggerScreenShake() {
-    screenShakeOffset = 8.0;
-    notifyListeners();
-    Future.delayed(const Duration(milliseconds: 80), () {
-      screenShakeOffset = -6.0;
-      notifyListeners();
-      Future.delayed(const Duration(milliseconds: 80), () {
-        screenShakeOffset = 0.0;
-        notifyListeners();
-      });
-    });
+    // Da bo hieu ung rung lac man hinh theo yeu cau
+    screenShakeOffset = 0.0;
   }
 
   void toggleAudio() {
@@ -293,28 +282,110 @@ class StoryPlayerController extends ChangeNotifier {
       );
     }
 
-    // Cập nhật tiến độ đọc lên Backend API (PUT /api/reading-logs/{id}/progress)
-    if (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId)) {
-      final duration = DateTime.now().difference(storySessionStartTime).inSeconds;
-      ReadingLogService.updateProgress(
-        readingLogId: activeReadingLogId!,
-        currentPage: newIndex + 1,
-        readDurationSeconds: duration,
-        token: appState.authToken,
-      );
+    // Cap nhat tien do doc len Backend API (PUT /api/reading-logs/{id}/progress)
+    _updateProgressOnPageChange(newIndex + 1);
+
+    // Neu be da lat toi trang cuoi cung cua truyen, tu dong danh dau hoan thanh phien doc
+    if (allPages.isNotEmpty && newIndex >= allPages.length - 1) {
+      completeReadingSession();
     }
 
     notifyListeners();
   }
 
-  /// Đánh dấu hoàn thành phiên đọc trên Backend API (PUT /api/reading-logs/{id}/complete)
-  Future<void> completeReadingSession() async {
+  /// Bat dau phien doc truyen tren Backend API (POST /api/reading-logs)
+  Future<ReadingLogSession?> startReadingSession() async {
     if (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId)) {
+      return null;
+    }
+
+    final candidateGenId = AppConfig.isValidUuid(story.id) ? story.id : null;
+    if (candidateGenId == null) {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] story.id khong phai UUID hop le: ${story.id}');
+      }
+      return null;
+    }
+
+    try {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Bat dau phien doc POST /api/reading-logs voi storyId: $candidateGenId');
+      }
+      final startedSession = await ReadingLogService.startReadingSession(
+        generatedStoryId: candidateGenId,
+        token: appState.authToken,
+      );
+      if (startedSession != null && AppConfig.isValidUuid(startedSession.id)) {
+        activeReadingLogId = startedSession.id;
+        if (kDebugMode) {
+          debugPrint('[StoryPlayerController] Da tao phien doc thanh cong: activeReadingLogId=$activeReadingLogId');
+        }
+        notifyListeners();
+        return startedSession;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Loi startReadingSession: $e');
+      }
+    }
+    return null;
+  }
+
+  /// Cap nhat tien do khi be lat trang
+  Future<void> _updateProgressOnPageChange(int pageNumber) async {
+    if (activeReadingLogId == null && _startSessionFuture != null) {
+      await _startSessionFuture;
+    }
+    if (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId)) {
+      final duration = DateTime.now().difference(storySessionStartTime).inSeconds;
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Cap nhat tien do PUT /api/reading-logs/$activeReadingLogId/progress trang $pageNumber, thoi gian ${duration}s');
+      }
+      ReadingLogService.updateProgress(
+        readingLogId: activeReadingLogId!,
+        currentPage: pageNumber,
+        readDurationSeconds: duration,
+        token: appState.authToken,
+      );
+    }
+  }
+
+  /// Danh dau hoan thanh phien doc tren Backend API (PUT /api/reading-logs/{id}/complete)
+  /// va dong bo danh sach truyen da doc xong (GET /api/reading-logs/child-profiles/{childProfileId}/completed)
+  Future<void> completeReadingSession() async {
+    if (isReadingSessionCompleted) return;
+    isReadingSessionCompleted = true;
+
+    // 1. Dam bao da co phien doc activeReadingLogId
+    if (activeReadingLogId == null || !AppConfig.isValidUuid(activeReadingLogId)) {
+      if (_startSessionFuture != null) {
+        await _startSessionFuture;
+      }
+      if (activeReadingLogId == null || !AppConfig.isValidUuid(activeReadingLogId)) {
+        await startReadingSession();
+      }
+    }
+
+    // 2. Goi PUT /api/reading-logs/{id}/complete
+    if (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId)) {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Hoan thanh truyen: goi PUT /api/reading-logs/$activeReadingLogId/complete');
+      }
       await ReadingLogService.completeReadingSession(
         readingLogId: activeReadingLogId!,
         token: appState.authToken,
       );
+    } else {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Canh bao: activeReadingLogId null nen khong the goi PUT complete.');
+      }
     }
+
+    // 3. Danh dau hoan thanh cuc bo ngay lap tuc de UI duoc cap nhat tuc thi
+    appState.markStoryCompleted(story.id);
+
+    // 4. Dong bo danh sach completed tu backend (GET /api/reading-logs/child-profiles/{childProfileId}/completed)
+    await appState.syncCompletedStoriesFromBackend();
   }
 
   void replayPageMotion() {
@@ -334,6 +405,7 @@ class StoryPlayerController extends ChangeNotifier {
             previousSlots: previousPageSlots,
             pageNumber: currentPage.pageNumber,
             storyTitle: story.title,
+            characterAction: currentPage.characterAction,
           );
     startTimelineLoop();
     spawnFireflies();
@@ -349,11 +421,25 @@ class StoryPlayerController extends ChangeNotifier {
       );
       if (roles.isNotEmpty) {
         storyRoles = roles;
+        // Cập nhật lại slots cho trang hiện tại nếu đang dùng auto-slot hoặc chưa có slots
+        if (pages.isNotEmpty && currentPageIndex < pages.length) {
+          final current = pages[currentPageIndex];
+          final currentKey = _pageSlotKey(current);
+          final currentSlots = slotsCacheByPage[currentKey];
+          final needsUpdate = currentSlots == null ||
+              currentSlots.isEmpty ||
+              currentSlots.any((s) => s.id.startsWith('auto-'));
+          if (needsUpdate) {
+            final newSlots = _generateFallbackSlotsForPage(current);
+            slotsCacheByPage[currentKey] = newSlots;
+            _applyPageSlots(current, newSlots, restartTimeline: true);
+          }
+        }
         notifyListeners();
       }
     } catch (_) {}
 
-    if (AppConfig.isValidUuid(story.id)) {
+    if (!isOriginalTemplate && AppConfig.isValidUuid(story.id)) {
       try {
         final mappings = await CharacterMappingService.fetchMappingsByStory(
           story.id,
@@ -368,19 +454,10 @@ class StoryPlayerController extends ChangeNotifier {
   }
 
   Future<void> ensureStoryPagesLoaded() async {
-    final needLoad = story.id.isNotEmpty &&
-        (pages.isEmpty ||
-            pages.length < story.totalPages ||
-            pages.any((p) => p.id == null || p.id!.startsWith('local-page-')));
+    final needLoad = _needsBackendPagesLoad;
 
-    if (!needLoad) {
-      isLoadingPages = false;
-      notifyListeners();
-      return;
-    }
-
-    isLoadingPages = true;
-    notifyListeners();
+    isLoadingPages = needLoad;
+    if (needLoad) notifyListeners();
 
     try {
       if (needLoad) {
@@ -391,22 +468,99 @@ class StoryPlayerController extends ChangeNotifier {
           totalPages: story.totalPages,
         );
         if (backendPages.isNotEmpty) {
-          pages = backendPages.map((dto) {
+          final mappedPages = backendPages.map((dto) {
+            final pageImg = (dto.imageUrl.isNotEmpty &&
+                    !dto.imageUrl.endsWith('/string') &&
+                    dto.imageUrl.toLowerCase() != 'string' &&
+                    dto.fullImageUrl.isNotEmpty)
+                ? dto.fullImageUrl
+                : (story.coverUrl.isNotEmpty && story.coverUrl.toLowerCase() != 'string'
+                    ? story.coverUrl
+                    : 'assets/images/Br.png');
+            final pageText = (dto.rawText.isNotEmpty &&
+                    dto.rawText.toLowerCase() != 'string')
+                ? dto.rawText
+                : (story.subtitle.isNotEmpty &&
+                        story.subtitle.toLowerCase() != 'string'
+                    ? story.subtitle
+                    : 'Trang ${dto.pageNumber}: Bé hãy cùng khám phá câu chuyện "${story.title}" thật kỳ diệu nhé!');
+            final audioUrl = (dto.audioNarrationUrl != null &&
+                    !dto.audioNarrationUrl!.endsWith('/string') &&
+                    dto.audioNarrationUrl!.toLowerCase() != 'string')
+                ? dto.audioNarrationUrl
+                : AppConfig.fallbackAudioUrlForPage(dto.pageNumber);
+
             return StoryPage(
               id: dto.id,
               pageNumber: dto.pageNumber,
-              imageUrl: dto.fullImageUrl.isNotEmpty ? dto.fullImageUrl : story.coverUrl,
-              textContent: dto.rawText,
-              englishSubtitle: dto.rawText,
+              imageUrl: pageImg,
+              textContent: pageText,
+              englishSubtitle: pageText,
               chapterTitle: 'Trang ${dto.pageNumber}: ${story.title}',
               narratorName: 'Chú Gấu Pô',
-              audioNarrationUrl: dto.audioNarrationUrl,
+              audioNarrationUrl: audioUrl,
               slots: dto.slots,
               animationClips: dto.animationClips,
             );
           }).toList();
 
-          pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+          mappedPages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+          // Bổ sung các trang còn lại nếu backend totalPages lớn hơn số trang đã tạo
+          while (story.totalPages > 0 && mappedPages.length < story.totalPages) {
+            final nextNum = mappedPages.length + 1;
+            mappedPages.add(
+              StoryPage(
+                id: '${story.id}-page-$nextNum',
+                pageNumber: nextNum,
+                imageUrl: story.coverUrl.isNotEmpty && story.coverUrl.toLowerCase() != 'string'
+                    ? story.coverUrl
+                    : 'assets/images/Br.png',
+                textContent: 'Trang $nextNum: Bé hãy cùng khám phá tiếp câu chuyện "${story.title}" thật kỳ diệu nhé!',
+                englishSubtitle: 'Page $nextNum: Let us continue exploring "${story.title}" together!',
+                chapterTitle: 'Trang $nextNum: ${story.title}',
+                narratorName: 'Chú Gấu Pô',
+                audioNarrationUrl: AppConfig.fallbackAudioUrlForPage(nextNum),
+              ),
+            );
+          }
+          pages = mappedPages;
+        }
+      }
+
+      // Đảm bảo không còn trang nào mang ảnh/text là dummy "string"
+      for (var i = 0; i < pages.length; i++) {
+        final p = pages[i];
+        final badImg = p.imageUrl.isEmpty ||
+            p.imageUrl.toLowerCase() == 'string' ||
+            p.imageUrl.endsWith('/string') ||
+            p.imageUrl.toLowerCase() == 'null';
+        final badText = p.textContent.isEmpty ||
+            p.textContent.toLowerCase() == 'string' ||
+            p.textContent.toLowerCase() == 'null';
+        if (badImg || badText) {
+          final fallbackImg = (story.coverUrl.isNotEmpty &&
+                  story.coverUrl.toLowerCase() != 'string' &&
+                  !story.coverUrl.endsWith('/string'))
+              ? story.coverUrl
+              : 'assets/images/Br.png';
+          pages[i] = StoryPage(
+            id: p.id,
+            pageNumber: p.pageNumber,
+            imageUrl: badImg ? fallbackImg : p.imageUrl,
+            textContent: badText
+                ? (story.subtitle.isNotEmpty &&
+                        story.subtitle.toLowerCase() != 'string'
+                    ? story.subtitle
+                    : 'Trang ${p.pageNumber}: Bé hãy cùng khám phá câu chuyện "${story.title}" thật kỳ diệu nhé!')
+                : p.textContent,
+            englishSubtitle: p.englishSubtitle,
+            chapterTitle: p.chapterTitle,
+            narratorName: p.narratorName,
+            audioNarrationUrl: p.audioNarrationUrl ?? AppConfig.fallbackAudioUrlForPage(p.pageNumber),
+            slots: p.slots,
+            animationClips: p.animationClips,
+          );
         }
       }
 
@@ -415,11 +569,19 @@ class StoryPlayerController extends ChangeNotifier {
         syncActionForCurrentPage(pages[currentPageIndex], fromInitState: true);
       }
 
-      await preloadAllStorySlots();
+      // Luôn gọi nạp Slots và Vocabularies từ server cho tất cả các trang
+      await Future.wait([
+        preloadAllStorySlots(),
+        preloadAllStoryVocabularies(),
+      ]);
 
-      // Delay 650ms để màn hình loading hiển thị êm ái, tránh chớp giật màn hình
-      await Future.delayed(const Duration(milliseconds: 650));
-    } catch (_) {
+      if (needLoad) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Error ensureStoryPagesLoaded: $e');
+      }
     } finally {
       isLoadingPages = false;
       notifyListeners();
@@ -442,9 +604,61 @@ class StoryPlayerController extends ChangeNotifier {
         );
         if (fetched.isNotEmpty) {
           slotsCacheByPage[key] = fetched;
+        } else {
+          // Backend DB chưa cấu hình slot, tự động sinh slot theo vai diễn của truyện
+          slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
         }
-      } catch (_) {}
+      } catch (_) {
+        slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
+      }
     }
+    // Cập nhật lại slots cho trang hiện tại sau khi nạp xong
+    if (pages.isNotEmpty && currentPageIndex < pages.length) {
+      syncActionForCurrentPage(pages[currentPageIndex]);
+      notifyListeners();
+    }
+  }
+
+  /// Tự động sinh slots hiển thị nhân vật trên sân khấu khi backend chưa tạo slot
+  List<CharacterSlotTemplate> _generateFallbackSlotsForPage(StoryPage page) {
+    if (storyRoles.isNotEmpty) {
+      final generated = <CharacterSlotTemplate>[];
+      final count = storyRoles.length;
+      for (var i = 0; i < count; i++) {
+        final role = storyRoles[i];
+        final double posX;
+        if (count == 1) {
+          posX = 50.0;
+        } else if (count == 2) {
+          posX = i == 0 ? 25.0 : 75.0;
+        } else {
+          posX = 18.0 + (i * 64.0 / (count - 1));
+        }
+        generated.add(
+          CharacterSlotTemplate(
+            id: 'auto-slot-${page.pageNumber}-$i',
+            storyPageId: page.id ?? '',
+            storyRoleTemplateId: role.id,
+            assetUrl: role.defaultAssetUrl,
+            posX: posX,
+            posY: 60.0,
+            scale: 1.05,
+            flipHorizontal: (count == 2 && i == 1) ? true : false,
+          ),
+        );
+      }
+      return generated;
+    }
+
+    return [
+      CharacterSlotTemplate(
+        id: 'auto-hero-slot-${page.pageNumber}',
+        storyPageId: page.id ?? '',
+        posX: 60.0,
+        posY: 60.0,
+        scale: 1.05,
+      ),
+    ];
   }
 
   String _pageSlotKey(StoryPage page) => page.id ?? 'page-${page.pageNumber}';
@@ -497,20 +711,13 @@ class StoryPlayerController extends ChangeNotifier {
     final initialSlots = cached ??
         (page.slots.isNotEmpty
             ? page.slots
-            : const <CharacterSlotTemplate>[]);
+            : _generateFallbackSlotsForPage(page));
 
-    if (initialSlots.isNotEmpty) {
-      _applyPageSlots(
-        page,
-        initialSlots,
-        restartTimeline: true,
-      );
-    } else {
-      originalPageSlots = [];
-      activePageSlots = [];
-      activeAnimationClips = [];
-      notifyListeners();
-    }
+    _applyPageSlots(
+      page,
+      initialSlots,
+      restartTimeline: true,
+    );
 
     if (page.id == null || !AppConfig.isValidUuid(page.id)) return;
 
@@ -534,8 +741,13 @@ class StoryPlayerController extends ChangeNotifier {
             restartTimeline: true,
           );
         }
+      } else {
+        // Backend DB không có record slot, lưu fallback slots vào cache
+        slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
       }
-    } catch (_) {}
+    } catch (_) {
+      slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
+    }
   }
 
   void _applyPageSlots(
@@ -543,22 +755,26 @@ class StoryPlayerController extends ChangeNotifier {
     List<CharacterSlotTemplate> rawSlots, {
     bool restartTimeline = true,
   }) {
-    final slots = StoryAnimationEngine.collapseRoleWaypoints(rawSlots);
-    final hasExplicitClips = page.animationClips.isNotEmpty ||
-        slots.any((s) => s.animationClips.isNotEmpty);
-    final clips = page.animationClips.isNotEmpty
-        ? page.animationClips
+    // Giu nguyen danh sach slot do Content Manager thiet lap
+    final slots = List<CharacterSlotTemplate>.from(rawSlots);
+    final explicitClips = <StoryAnimationClip>[
+      ...page.animationClips,
+      for (final s in slots) ...s.animationClips,
+    ];
+    final clips = explicitClips.isNotEmpty
+        ? explicitClips
         : StoryAnimationEngine.buildContextualClipsForSlots(
             slots: slots,
             previousSlots: previousPageSlots,
             pageNumber: page.pageNumber,
             storyTitle: story.title,
+            characterAction: page.characterAction,
           );
     final durationMs = StoryAnimationEngine.animationDuration(
       clips,
       slots: slots,
-      minDurationMs: 4200.0,
-      loopHoldMs: hasExplicitClips ? 1100.0 : 0.0,
+      minDurationMs: 3600.0,
+      loopHoldMs: explicitClips.isNotEmpty ? 1100.0 : 0.0,
     );
 
     originalPageSlots = List<CharacterSlotTemplate>.from(slots);
@@ -584,19 +800,22 @@ class StoryPlayerController extends ChangeNotifier {
     StoryRoleTemplate? matchedRole,
     int slotIndex = 0,
   }) {
-    // 1. Kiem tra mapping theo roleId truc tiep tu appState
+    // 0. Khi dang xem mau truyen goc (Original Mode), luon tra ve null de hien thi 100% anh va vai goc tu CM
+    if (isOriginalTemplate) return null;
+
+    // 1. Kiem tra mapping theo roleId truc tiep tu appState cho dung truyen nay
     if (roleId != null && roleId.isNotEmpty) {
       final fromState = appState.getMappedCharacterForRole(story.id, roleId);
       if (fromState != null && fromState.isParentApproved) return fromState;
     }
 
-    // 2. Kiem tra mapping theo matchedRole.id tu appState
+    // 2. Kiem tra mapping theo matchedRole.id tu appState cho dung truyen nay
     if (matchedRole != null && matchedRole.id.isNotEmpty && matchedRole.id != roleId) {
       final fromMatched = appState.getMappedCharacterForRole(story.id, matchedRole.id);
       if (fromMatched != null && fromMatched.isParentApproved) return fromMatched;
     }
 
-    // 3. Kiem tra storyMappings tu API may chu neu co
+    // 3. Kiem tra storyMappings tu API may chu neu co cho dung vai nay
     final effectiveRoleId = (roleId != null && roleId.isNotEmpty) ? roleId : matchedRole?.id;
     if (effectiveRoleId != null && effectiveRoleId.isNotEmpty) {
       for (final m in storyMappings) {
@@ -609,36 +828,9 @@ class StoryPlayerController extends ChangeNotifier {
       }
     }
 
-    // 4. Khop theo loai vai dien tu StoryRoleTemplate:
-    // Vai chinh (mainCharacter) -> Dung heroCharacter neu da duyet
-    if (matchedRole?.storyRoleType == StoryRoleType.mainCharacter &&
-        appState.heroCharacter != null &&
-        appState.heroCharacter!.isParentApproved) {
-      return appState.heroCharacter;
-    }
-
-    // Vai ban di cung (companion) -> Dung companionCharacter neu da duyet
-    if (matchedRole?.storyRoleType == StoryRoleType.companion &&
-        appState.companionCharacter != null &&
-        appState.companionCharacter!.isParentApproved) {
-      return appState.companionCharacter;
-    }
-
-    // 5. Khop theo thu tu Slot xuat hien tren san khau:
-    // Slot 0 (nhan vat dau tien tren san khau) -> Uu tien gan Ban Chinh (heroCharacter)
-    if (slotIndex == 0 &&
-        appState.heroCharacter != null &&
-        appState.heroCharacter!.isParentApproved) {
-      return appState.heroCharacter;
-    }
-
-    // Slot 1 (nhan vat thu 2) -> Uu tien gan Ban Di Cung (companionCharacter)
-    if (slotIndex == 1 &&
-        appState.companionCharacter != null &&
-        appState.companionCharacter!.isParentApproved) {
-      return appState.companionCharacter;
-    }
-
+    // 4. Neu vai nay chua duoc be chu dong gan rieng cho truyen nay,
+    // TUYET DOI KHONG tu dong gan hoac lay trung nhan vat tu vai khac.
+    // Tra ve null de he thong tu dong hien thi 100% hinh anh goc tu Content Manager (CM).
     return null;
   }
 
@@ -791,7 +983,8 @@ class StoryPlayerController extends ChangeNotifier {
   }
 
   Future<void> preloadAllStoryVocabularies() async {
-    for (final page in story.pages) {
+    final targetPages = pages.isNotEmpty ? pages : story.pages;
+    for (final page in targetPages) {
       final pageId = page.id ?? '';
       if (!AppConfig.isValidUuid(pageId)) continue;
       try {
@@ -804,6 +997,12 @@ class StoryPlayerController extends ChangeNotifier {
         for (final v in list) {
           allStoryVocabularies[v.id] = v;
         }
+        if (pages.isNotEmpty &&
+            currentPageIndex < pages.length &&
+            pages[currentPageIndex].id == pageId &&
+            list.isNotEmpty) {
+          pageVocabularies = list;
+        }
       } catch (_) {}
     }
     notifyListeners();
@@ -814,6 +1013,32 @@ class StoryPlayerController extends ChangeNotifier {
     spawnFireflies();
     notifyListeners();
   }
+
+  /// Goi GET /api/story-vocabulary/{id} de lay chi tiet tu vung khi be cham hoc
+  Future<VocabularyTemplate> inspectVocabularyDetail(
+    VocabularyTemplate vocab,
+  ) async {
+    if (AppConfig.isValidUuid(vocab.id)) {
+      try {
+        final detail = await VocabularyService.fetchVocabularyById(
+          vocab.id,
+          token: appState.authToken,
+        );
+        if (detail != null) {
+          allStoryVocabularies[detail.id] = detail;
+          final idx = pageVocabularies.indexWhere((v) => v.id == detail.id);
+          if (idx >= 0) {
+            pageVocabularies[idx] = detail;
+          }
+          notifyListeners();
+          return detail;
+        }
+      } catch (_) {}
+    }
+    return vocab;
+  }
+
+  ReadingLogQuizSummary? activeQuizSummary;
 
   Future<void> preloadStoryQuizzesAndReadingLog() async {
     if (storyQuizzes.isEmpty) {
@@ -839,38 +1064,64 @@ class StoryPlayerController extends ChangeNotifier {
       notifyListeners();
     }
 
-    if (activeReadingLogId == null) {
-      final childProfileId = appState.activeChildProfile?.id;
-      if (AppConfig.isValidUuid(childProfileId)) {
-        try {
-          final history = await QuizService.fetchChildQuizHistory(
-            childProfileId!,
-            token: appState.authToken,
-          );
-          if (history.isNotEmpty) {
-            final quizIds = quizTemplates.map((q) => q.id).toSet();
-            ReadingLogQuizSummary? matched;
-            for (final item in history) {
-              if (!AppConfig.isValidUuid(item.readingLogId)) continue;
-              final matchesStory = item.answers.any(
-                (a) => quizIds.contains(a.storyQuizTemplateId),
-              );
-              if (matchesStory) {
-                matched = item;
-                break;
-              }
-            }
-            matched ??= history.cast<ReadingLogQuizSummary?>().firstWhere(
-              (s) => s != null && !s.isQuizCompleted && AppConfig.isValidUuid(s.readingLogId),
-              orElse: () => null,
+    final childProfileId = appState.effectiveChildProfileId;
+
+    // 1. Kiem tra danh sach truyen da doc xong tren Backend (GET /api/reading-logs/child-profiles/{childProfileId}/completed)
+    if (AppConfig.isValidUuid(childProfileId)) {
+      await appState.syncCompletedStoriesFromBackend();
+    }
+
+    // 2. Dam bao da bat dau phien doc
+    if (activeReadingLogId == null || !AppConfig.isValidUuid(activeReadingLogId)) {
+      if (_startSessionFuture != null) {
+        await _startSessionFuture;
+      }
+      if (activeReadingLogId == null || !AppConfig.isValidUuid(activeReadingLogId)) {
+        await startReadingSession();
+      }
+    }
+
+    // 3. Tra cuu lich su lam quiz cua be neu chua co activeQuizSummary
+    if (activeQuizSummary == null && AppConfig.isValidUuid(childProfileId)) {
+      try {
+        final history = await QuizService.fetchChildQuizHistory(
+          childProfileId!,
+          token: appState.authToken,
+        );
+        if (history.isNotEmpty) {
+          final quizIds = quizTemplates.map((q) => q.id).toSet();
+          ReadingLogQuizSummary? matched;
+          for (final item in history) {
+            if (!AppConfig.isValidUuid(item.readingLogId)) continue;
+            final matchesStory = item.answers.any(
+              (a) => quizIds.contains(a.storyQuizTemplateId),
             );
-            if (matched != null) {
-              activeReadingLogId = matched.readingLogId;
-              notifyListeners();
+            if (matchesStory) {
+              matched = item;
+              break;
             }
           }
-        } catch (_) {}
-      }
+          if (matched != null) {
+            activeQuizSummary = matched;
+            notifyListeners();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 4. Neu da co activeReadingLogId, kiem tra tom tat ket qua quiz cua phien doc nay
+    // (GET /api/child-quiz-answers/reading-logs/{readingLogId})
+    if (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId)) {
+      try {
+        final summary = await QuizService.fetchReadingLogSummary(
+          activeReadingLogId!,
+          token: appState.authToken,
+        );
+        if (summary != null) {
+          activeQuizSummary = summary;
+          notifyListeners();
+        }
+      } catch (_) {}
     }
   }
 
@@ -890,25 +1141,27 @@ class StoryPlayerController extends ChangeNotifier {
         .clamp(0, 600);
 
     SubmitQuizAnswerResult? serverResult;
-    if (activeReadingLogId != null &&
-        template != null &&
-        AppConfig.isValidUuid(activeReadingLogId) &&
-        AppConfig.isValidUuid(template.id)) {
-      isSubmittingTabQuiz = true;
+    final logIdToSend = (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId))
+        ? activeReadingLogId!
+        : '00000000-0000-0000-0000-000000000000';
+    final quizIdToSend = (template != null && AppConfig.isValidUuid(template.id))
+        ? template.id
+        : (AppConfig.isValidUuid(story.id) ? story.id : '00000000-0000-0000-0000-000000000000');
+
+    isSubmittingTabQuiz = true;
+    notifyListeners();
+    try {
+      serverResult = await QuizService.submitAnswer(
+        readingLogId: logIdToSend,
+        storyQuizTemplateId: quizIdToSend,
+        selectedOptionIndex: selectedTabQuizOption,
+        responseTimeSeconds: elapsedSeconds,
+        childProfileId: appState.effectiveChildProfileId,
+        token: appState.authToken,
+      );
+    } finally {
+      isSubmittingTabQuiz = false;
       notifyListeners();
-      try {
-        serverResult = await QuizService.submitAnswer(
-          readingLogId: activeReadingLogId!,
-          storyQuizTemplateId: template.id,
-          selectedOptionIndex: selectedTabQuizOption,
-          responseTimeSeconds: elapsedSeconds,
-          childProfileId: appState.activeChildProfile?.id,
-          token: appState.authToken,
-        );
-      } finally {
-        isSubmittingTabQuiz = false;
-        notifyListeners();
-      }
     }
 
     if (serverResult != null) {
@@ -969,13 +1222,23 @@ class StoryPlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (!isReadingSessionCompleted &&
+        activeReadingLogId != null &&
+        AppConfig.isValidUuid(activeReadingLogId)) {
+      final duration = DateTime.now().difference(storySessionStartTime).inSeconds;
+      ReadingLogService.updateProgress(
+        readingLogId: activeReadingLogId!,
+        currentPage: currentPageIndex + 1,
+        readDurationSeconds: duration,
+        token: appState.authToken,
+      );
+    }
     _audioPosSub?.cancel();
     _audioDurSub?.cancel();
     _audioStateSub?.cancel();
     _lastPageAudioTimer?.cancel();
     audioService.dispose();
     _playheadController?.dispose();
-    _sparkleController.dispose();
     super.dispose();
   }
 }

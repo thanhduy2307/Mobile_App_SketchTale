@@ -4,6 +4,7 @@ import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/responsive.dart';
 import '../../widgets/app_loading.dart';
+import '../../widgets/app_screen_background.dart';
 import 'components/role_character_shelf.dart';
 import 'components/role_slot_card.dart';
 import 'components/role_step_instruction.dart';
@@ -55,10 +56,11 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
     final story = state.currentStory;
     final isTablet = Responsive.isTabletOrDesktop(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface.withValues(alpha: 0.9),
+    return AppScreenBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface.withValues(alpha: 0.88),
         elevation: 0,
         leading: ChunkyIconButton(
           size: 40,
@@ -208,8 +210,9 @@ class _RoleAssignmentScreenState extends State<RoleAssignmentScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildRoleSlotsList(AppState state, bool isTablet) {
     final roles = _controller.storyRoles;

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../models/models.dart';
 import '../utils/app_config.dart';
+import 'api_client.dart';
 
 /// Result wrapper for Drawing AI operations
 class DrawingAiResult<T> {
@@ -34,7 +35,7 @@ class DrawingAiResult<T> {
 /// Stage 2: Generate 3D Character (POST /api/drawings/generate-character)
 /// Credit Logs: GET /api/credit-transaction-logs
 class DrawingAiService {
-  static final http.Client _client = http.Client();
+  static final http.Client _client = ApiClient.instance;
 
   // ==========================================
   // GIAI ĐOẠN 1: QUÉT & NHẬN DIỆN TRANH VẼ
@@ -84,7 +85,30 @@ class DrawingAiService {
       }
 
       final streamedResponse = await _client.send(request).timeout(const Duration(seconds: 45));
-      final response = await http.Response.fromStream(streamedResponse);
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 401) {
+        if (kDebugMode) {
+          debugPrint('[DrawingAiService] 401 Unauthorized. Dang lam moi token va retry analyze...');
+        }
+        final newToken = await ApiClient.instance.refreshToken();
+        if (newToken != null && newToken.isNotEmpty) {
+          final retryRequest = http.MultipartRequest('POST', url);
+          retryRequest.headers['Accept'] = 'application/json';
+          retryRequest.headers['Authorization'] = 'Bearer $newToken';
+          retryRequest.fields.addAll(request.fields);
+          retryRequest.files.add(
+            http.MultipartFile.fromBytes(
+              'File',
+              bytes,
+              filename: fileName,
+              contentType: MediaType('image', 'png'),
+            ),
+          );
+          final retryStreamed = await _client.send(retryRequest).timeout(const Duration(seconds: 45));
+          response = await http.Response.fromStream(retryStreamed);
+        }
+      }
 
       if (kDebugMode) {
         debugPrint('[DrawingAiService] Analyze status: ${response.statusCode}');

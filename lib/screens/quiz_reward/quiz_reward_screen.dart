@@ -3,7 +3,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/responsive.dart';
-import 'components/quiz_hint_card.dart';
+import '../../widgets/app_screen_background.dart';
 import 'components/quiz_options_list.dart';
 import 'components/quiz_question_card.dart';
 import 'components/quiz_score_banner.dart';
@@ -12,12 +12,12 @@ import 'quiz_reward_controller.dart';
 export 'quiz_reward_controller.dart';
 export 'quiz_reward_styles.dart';
 
-/// 🧠 Màn hình Câu Đố Vui & Nhận Thưởng (Safe-to-Fail UX)
-/// - Thanh tiến độ hình ảnh nhân vật chạy về phía hộp quà
-/// - Giọng đọc câu hỏi từ file âm thanh CM
-/// - Đáp án co giãn linh hoạt 1 từ đến câu dài, căn giữa
-/// - Chọn sai: Rung lắc nhẹ, đổi màu cam nhạt/xám mờ, vô hiệu hóa thẻ, hiện linh vật động viên
-/// - Chọn đúng: Nảy lên, màu xanh lá tươi, sao lấp lánh, tự động chuyển câu sau 1.5s
+/// Man hinh Cau Do Vui & Nhan Thuong (Safe-to-Fail UX)
+/// - Thanh tien do hinh anh nhan vat chay ve phia hop qua
+/// - Giong doc cau hoi tu file am thanh CM
+/// - Dap an co gian linh hoat 1 tu den cau dai, can giua
+/// - Chon sai: Rung lac nhe, hien bieu tuong sai ben trai, khong khoa o va nhac nho be neu chon lai
+/// - Chon dung: Nay len, mau xanh la tuoi, tu dong chuyen cau sau 1.5s
 class QuizRewardScreen extends StatefulWidget {
   final AppState appState;
   final Story story;
@@ -42,7 +42,10 @@ class _QuizRewardScreenState extends State<QuizRewardScreen>
   @override
   void initState() {
     super.initState();
-    _controller = QuizRewardController(story: widget.story);
+    _controller = QuizRewardController(
+      story: widget.story,
+      initialReadingLogId: widget.readingLogId,
+    );
     _controller.addListener(() {
       if (mounted) setState(() {});
     });
@@ -56,6 +59,7 @@ class _QuizRewardScreenState extends State<QuizRewardScreen>
       storyId: widget.story.id,
       storyTitle: widget.story.title,
       token: widget.appState.authToken,
+      appState: widget.appState,
     );
   }
 
@@ -78,8 +82,9 @@ class _QuizRewardScreenState extends State<QuizRewardScreen>
             const QuizOptionDetail(letter: 'D', title: 'D. Quả Cầu Pha Lê', subtitle: '', imageUrl: ''),
           ];
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
+    return AppScreenBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -132,16 +137,10 @@ class _QuizRewardScreenState extends State<QuizRewardScreen>
                       story: widget.story,
                       readingLogId: widget.readingLogId,
                     ),
-                    onAutoNext: () => _controller.nextQuestion(context),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // 4. Gợi ý trợ giúp từ Gấu Pô
-                  QuizHintCard(
-                    quiz: quiz,
-                    showHint: _controller.showHint,
-                    onToggleHint: _controller.toggleHint,
+                    onAutoNext: () => _controller.nextQuestion(
+                      context,
+                      appState: widget.appState,
+                    ),
                   ),
 
                   const SizedBox(height: 20),
@@ -151,6 +150,7 @@ class _QuizRewardScreenState extends State<QuizRewardScreen>
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

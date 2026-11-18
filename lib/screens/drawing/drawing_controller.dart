@@ -24,9 +24,9 @@ import 'drawing_styles.dart';
 import 'drawing_types.dart';
 import 'utils/flood_fill_helper.dart';
 
-/// 🧠 DrawingController (Tương đương React Custom Hook `useDrawingScreen`)
-/// Quản lý toàn bộ State, tương tác Bảng vẽ (Canvas), Lịch sử (Undo/Clear),
-/// và Luồng gọi AI 2 giai đoạn (Phân tích nét vẽ -> Sinh ảnh 3D -> Gửi Ba Mẹ duyệt).
+/// DrawingController (Tuong duong React Custom Hook `useDrawingScreen`)
+/// Quan ly toan bo State, tuong tac Bang ve (Canvas), Lich su (Undo/Clear),
+/// va Luong goi AI 2 giai doan (Phan tich net ve -> Sinh anh 3D -> Gui Ba Me duyet).
 class DrawingController extends ChangeNotifier {
   final GlobalKey canvasKey = GlobalKey();
 
@@ -97,14 +97,14 @@ class DrawingController extends ChangeNotifier {
         }
         currentFillImage = fillHistory.isNotEmpty ? fillHistory.last : null;
         notifyListeners();
-        onToast?.call('Đã hoàn tác lần đổ màu ↩️');
+        onToast?.call('Đã hoàn tác lần đổ màu');
         return;
       }
     }
     if (appState.strokeLines.isNotEmpty) {
       appState.undoLastStroke();
       notifyListeners();
-      onToast?.call('Đã hoàn tác nét vẽ ↩️');
+      onToast?.call('Đã hoàn tác nét vẽ');
     }
   }
 
@@ -567,12 +567,12 @@ class DrawingController extends ChangeNotifier {
               ),
               const SizedBox(height: 18),
               Text(
-                'Bút Thần Đang Ngắm Tranh...',
+                'Mèo Miu Đang Ngắm Tranh...',
                 style: AppTypography.headlineMd(color: AppColors.onSurface),
               ),
               const SizedBox(height: 6),
               Text(
-                'Bút thần đang đoán xem bức tranh của bé là bạn nhỏ nào nhé...',
+                'Mèo Miu đang đoán xem bức tranh của bé là bạn nhỏ nào nhé...',
                 textAlign: TextAlign.center,
                 style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
               ),
@@ -618,8 +618,8 @@ class DrawingController extends ChangeNotifier {
               const SizedBox(height: 6),
               Text(
                 isRegenerate
-                    ? 'Phép thuật đang biến hóa diện mạo mới cho bạn nhỏ...'
-                    : 'Bút thần đang vẽ nên người bạn nhỏ tuyệt đẹp cho bé...',
+                    ? 'Mèo Miu đang biến hóa diện mạo mới cho bạn nhỏ...'
+                    : 'Mèo Miu đang vẽ nên người bạn nhỏ tuyệt đẹp cho bé...',
                 textAlign: TextAlign.center,
                 style: AppTypography.bodySm(color: AppColors.onSurfaceVariant),
               ),
