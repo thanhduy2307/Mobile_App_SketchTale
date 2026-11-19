@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/image_picker_helper.dart';
 import '../../utils/responsive.dart';
 import 'components/drawing_canvas_area.dart';
 import 'components/drawing_mode_selector.dart';
@@ -76,19 +77,26 @@ class _DrawingScreenState extends State<DrawingScreen> {
     );
   }
 
-  void _triggerCameraUpload() {
-    _showToast('Đang mở máy ảnh quét tranh giấy của bé...');
-    Future.delayed(const Duration(milliseconds: 900), () {
+  Future<void> _triggerImageUpload() async {
+    _showToast('Đang mở thư mục để bé chọn ảnh từ máy...');
+    final picked = await pickImageFromDevice();
+    if (picked == null || picked.bytes.isEmpty) {
       if (mounted) {
-        _showToast('Đã chụp xong bức tranh! Mèo Miu đang hóa phép...');
-        _controller.startTransformWorkflow(
-          context: context,
-          appState: widget.appState,
-          onOpenCollection: widget.onOpenCollection,
-          onToast: _showToast,
-        );
+        _controller.setActiveDrawMode(0);
       }
-    });
+      return;
+    }
+
+    if (mounted) {
+      _showToast('Đã tải ảnh lên thành công! Mèo Miu đang biến hình...');
+      _controller.startTransformWorkflow(
+        context: context,
+        appState: widget.appState,
+        onOpenCollection: widget.onOpenCollection,
+        onToast: _showToast,
+        overrideBytes: picked.bytes,
+      );
+    }
   }
 
   @override
@@ -120,7 +128,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
                     parentCredits: state.parentCredits,
                     remainingLimit: state.remainingCharacterLimit,
                     onModeChanged: (mode) => _controller.setActiveDrawMode(mode),
-                    onCameraTap: _triggerCameraUpload,
+                    onCameraTap: _triggerImageUpload,
                   ),
 
                   const SizedBox(height: 12),

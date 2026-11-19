@@ -467,7 +467,11 @@ class _CharacterCutoutImageState extends State<CharacterCutoutImage> {
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
-      loadingBuilder: appImageLoadingBuilder,
+      // Giu trong suot hoan toan trong luc dang tai anh tu mang, khong hien bat ky khung trang hay loader nao
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const SizedBox.shrink();
+      },
       errorBuilder: (_, _, _) => onError != null
           ? onError()
           : (widget.errorFallbackBuilder?.call() ?? const SizedBox.shrink()),
@@ -494,7 +498,7 @@ class _CharacterCutoutImageState extends State<CharacterCutoutImage> {
       if (fallback != null && fallback.isNotEmpty) {
         child = _buildStandardImage(fallback);
       } else {
-        return widget.errorFallbackBuilder?.call() ?? const SizedBox.shrink();
+        return const SizedBox.shrink();
       }
     } else {
       child = _buildStandardImage(
@@ -503,7 +507,7 @@ class _CharacterCutoutImageState extends State<CharacterCutoutImage> {
           if (fallback != null && fallback.isNotEmpty && fallback != primary) {
             return _buildStandardImage(fallback);
           }
-          return widget.errorFallbackBuilder?.call() ?? const SizedBox.shrink();
+          return const SizedBox.shrink();
         },
       );
     }

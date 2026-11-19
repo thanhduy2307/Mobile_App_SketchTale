@@ -66,6 +66,15 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
       readingLogId: widget.readingLogId,
       isOriginalTemplate: widget.isOriginalTemplate,
     )..initialize();
+
+    _controller.onStoryCompleted = () {
+      if (!mounted) return;
+      StoryFinishedDialog.show(
+        context,
+        storyTitle: widget.story.title,
+        onOpenQuizReward: _openQuizRewardScreen,
+      );
+    };
   }
 
   @override
@@ -265,13 +274,13 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                             final stageSlots = _controller.buildStageSlotItems(
                               currentPage,
                             );
-                            final rawSubtitle = currentPage?.characterSpeech ??
-                                currentPage?.textContent;
-                            final effectiveSubtitle = (rawSubtitle != null &&
-                                    rawSubtitle.trim().isNotEmpty &&
-                                    rawSubtitle.trim().toLowerCase() != 'string' &&
-                                    rawSubtitle.trim().toLowerCase() != 'null')
-                                ? rawSubtitle.trim()
+                            final liveSubtitle = (currentPage != null && currentPage.subtitles.isNotEmpty)
+                                ? currentPage.subtitleAtPlayhead(_controller.playheadMs)
+                                : (currentPage?.characterSpeech ?? currentPage?.textContent ?? '');
+                            final effectiveSubtitle = (liveSubtitle.trim().isNotEmpty &&
+                                    liveSubtitle.trim().toLowerCase() != 'string' &&
+                                    liveSubtitle.trim().toLowerCase() != 'null')
+                                ? liveSubtitle.trim()
                                 : 'Trang ${_controller.currentPageIndex + 1}: Cùng khám phá câu chuyện "${widget.story.title}"';
 
                             final rawImg = currentPage?.imageUrl ?? '';
@@ -286,15 +295,30 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
                                     ? widget.story.coverUrl
                                     : 'assets/images/Br.png');
 
-                            return StoryCanvasView(
-                              imageUrl: effectiveImage,
-                              chapterTitle:
-                                  currentPage?.chapterTitle ??
-                                  'Trang ${_controller.currentPageIndex + 1} / ${pages.length}',
-                              category: widget.story.category,
-                              subtitleText: effectiveSubtitle,
-                              stageSlots: stageSlots,
-                              heroCharacter: widget.appState.heroCharacter,
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 380),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              layoutBuilder: (currentChild, previousChildren) {
+                                return Stack(
+                                  alignment: Alignment.center,
+                                  children: <Widget>[
+                                    ...previousChildren,
+                                    if (currentChild != null) currentChild,
+                                  ],
+                                );
+                              },
+                              child: StoryCanvasView(
+                                key: ValueKey('canvas-page-${currentPage?.id ?? _controller.currentPageIndex}'),
+                                imageUrl: effectiveImage,
+                                chapterTitle:
+                                    currentPage?.chapterTitle ??
+                                    'Trang ${_controller.currentPageIndex + 1} / ${pages.length}',
+                                category: widget.story.category,
+                                subtitleText: effectiveSubtitle,
+                                stageSlots: stageSlots,
+                                heroCharacter: widget.appState.heroCharacter,
+                              ),
                             );
                           },
                         ),

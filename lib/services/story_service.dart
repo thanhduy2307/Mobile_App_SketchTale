@@ -218,6 +218,8 @@ class StoryService {
 
     final headers = <String, String>{
       'Accept': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
     };
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
@@ -241,8 +243,10 @@ class StoryService {
       return const [];
     }
 
+    final ts = DateTime.now().millisecondsSinceEpoch;
     // 1. Primary endpoint: GET /api/storypage-template/pages/{storyId}
-    final pagesUrl = Uri.parse(AppConfig.storyTemplatePagesUrl(cleanId));
+    final rawPagesUrl = AppConfig.storyTemplatePagesUrl(cleanId);
+    final pagesUrl = Uri.parse(rawPagesUrl.contains('?') ? '$rawPagesUrl&_t=$ts' : '$rawPagesUrl?_t=$ts');
     try {
       if (kDebugMode) {
         debugPrint('[StoryService] GET $pagesUrl');
@@ -268,7 +272,8 @@ class StoryService {
 
     // 2. Secondary endpoint: GET /api/storypage-template/all-pages/{storyId}
     // Giai quyet van de xung dot route ASP.NET Core hoac role
-    final allPagesUrl = Uri.parse(AppConfig.storyTemplateAllPagesUrl(cleanId));
+    final rawAllPagesUrl = AppConfig.storyTemplateAllPagesUrl(cleanId);
+    final allPagesUrl = Uri.parse(rawAllPagesUrl.contains('?') ? '$rawAllPagesUrl&_t=$ts' : '$rawAllPagesUrl?_t=$ts');
     try {
       if (kDebugMode) {
         debugPrint('[StoryService] GET $allPagesUrl (Fallback)');

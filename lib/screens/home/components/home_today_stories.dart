@@ -30,7 +30,7 @@ class HomeTodayStories extends StatelessWidget {
     required int durationMinutes,
     required bool isTablet,
   }) {
-    final imageHeight = isTablet ? 115.0 : 92.0;
+    final thumbSize = isTablet ? 78.0 : 66.0;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -38,101 +38,106 @@ class HomeTodayStories extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: () => onStorySelected(story),
         child: Container(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 12 : 10,
+            vertical: isTablet ? 10 : 8,
+          ),
           decoration: HomeStyles.todayStoryCardDecoration,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              // Image with time pill
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: SizedBox(
-                      height: imageHeight,
-                      width: double.infinity,
-                      child: Image.network(
-                        story.coverUrl,
-                        fit: BoxFit.cover,
-                        loadingBuilder: appImageLoadingBuilder,
-                        errorBuilder: (_, _, _) => Container(
-                          color: AppColors.surfaceContainer,
-                          child: const Icon(
-                            Icons.auto_stories_rounded,
-                            size: 32,
-                            color: AppColors.primary,
+              // Anh bia vuong nho gon ben trai - Hien thi tron ven nhan vat khong bi cat
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: thumbSize,
+                  height: thumbSize,
+                  color: const Color(0xFFFDF8EE),
+                  child: Image.network(
+                    story.coverUrl,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                    loadingBuilder: appImageLoadingBuilder,
+                    errorBuilder: (_, _, _) => Container(
+                      color: AppColors.surfaceContainer,
+                      child: const Icon(
+                        Icons.auto_stories_rounded,
+                        size: 28,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: isTablet ? 14 : 10),
+              // Thong tin truyen o giua
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      story.title,
+                      style: AppTypography.headlineSm(color: AppColors.onSurface).copyWith(
+                        fontSize: isTablet ? 16.0 : 14.0,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryFixed,
+                            borderRadius: BorderRadius.circular(9999),
+                            border: Border.all(color: const Color(0xFFFCD34D), width: 0.8),
+                          ),
+                          child: Text(
+                            '$durationMinutes phút',
+                            style: AppTypography.labelSm(color: const Color(0xFF92400E)).copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(9999),
-                        border: Border.all(color: AppColors.outline, width: 0.8),
-                      ),
-                      child: Text(
-                        '$durationMinutes phút',
-                        style: AppTypography.labelSm(color: AppColors.onSurface).copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainerHigh,
+                            borderRadius: BorderRadius.circular(9999),
+                          ),
+                          child: Text(
+                            'Đồng hành cùng bé',
+                            style: AppTypography.labelSm(color: AppColors.onSurfaceVariant).copyWith(
+                              fontSize: 11,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 7),
-              Text(
-                story.title,
-                style: AppTypography.headlineSm(color: AppColors.onSurface).copyWith(
-                  fontSize: isTablet ? 15.5 : 14.0,
-                  fontWeight: FontWeight.w800,
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(9999),
-                      ),
-                      child: Text(
-                        'Đồng hành cùng bé',
-                        style: AppTypography.labelSm(color: AppColors.onSurfaceVariant).copyWith(
-                          fontSize: 11,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Squishy3DButton(
-                    onPressed: () => onStorySelected(story),
-                    width: 32,
-                    height: 32,
-                    padding: EdgeInsets.zero,
-                    backgroundColor: accentColor,
-                    bevelColor: bevelColor,
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: AppColors.onPrimary,
-                      size: 18,
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 10),
+              // Nut Play 3D ben phai
+              Squishy3DButton(
+                onPressed: () => onStorySelected(story),
+                width: isTablet ? 38 : 34,
+                height: isTablet ? 38 : 34,
+                padding: EdgeInsets.zero,
+                backgroundColor: accentColor,
+                bevelColor: bevelColor,
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: AppColors.onPrimary,
+                  size: isTablet ? 22 : 18,
+                ),
               ),
             ],
           ),

@@ -159,13 +159,26 @@ class DrawingModeSelector extends StatelessWidget {
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(9999),
                     ),
-                    child: Text(
-                      'Chụp ảnh',
-                      style: AppTypography.labelSm(
-                        color: activeDrawMode == 1
-                            ? AppColors.onPrimary
-                            : AppColors.onSurfaceVariant,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.cloud_upload_outlined,
+                          size: 15,
+                          color: activeDrawMode == 1
+                              ? AppColors.onPrimary
+                              : AppColors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tải ảnh lên',
+                          style: AppTypography.labelSm(
+                            color: activeDrawMode == 1
+                                ? AppColors.onPrimary
+                                : AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

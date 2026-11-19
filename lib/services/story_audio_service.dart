@@ -17,10 +17,12 @@ class StoryAudioService {
   final _positionController = StreamController<Duration>.broadcast();
   final _durationController = StreamController<Duration>.broadcast();
   final _stateController = StreamController<bool>.broadcast();
+  final _completeController = StreamController<void>.broadcast();
 
   Stream<Duration> get onPositionChanged => _positionController.stream;
   Stream<Duration> get onDurationChanged => _durationController.stream;
   Stream<bool> get onPlayingStateChanged => _stateController.stream;
+  Stream<void> get onPlayerComplete => _completeController.stream;
 
   Duration get currentPosition => _currentPosition;
   Duration get totalDuration => _totalDuration;
@@ -62,6 +64,9 @@ class StoryAudioService {
         if (!_positionController.isClosed) {
           _positionController.add(Duration.zero);
         }
+        if (!_completeController.isClosed) {
+          _completeController.add(null);
+        }
       });
 
       _isInitialized = true;
@@ -89,6 +94,10 @@ class StoryAudioService {
 
     try {
       await _player!.stop();
+      _currentPosition = Duration.zero;
+      if (!_positionController.isClosed) {
+        _positionController.add(Duration.zero);
+      }
       if (url.startsWith('assets/')) {
         await _player!.play(AssetSource(url.replaceFirst('assets/', '')));
       } else {
@@ -180,6 +189,7 @@ class StoryAudioService {
     _positionController.close();
     _durationController.close();
     _stateController.close();
+    _completeController.close();
   }
 }
 

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -40,10 +40,14 @@ class StoryPlayerController extends ChangeNotifier {
   final StoryAudioService audioService = StoryAudioService();
   Duration audioPosition = Duration.zero;
   Duration audioDuration = Duration.zero;
+  bool isNarrationActive = false;
   StreamSubscription<Duration>? _audioPosSub;
   StreamSubscription<Duration>? _audioDurSub;
   StreamSubscription<bool>? _audioStateSub;
+  StreamSubscription<void>? _audioCompleteSub;
+  Timer? _autoAdvanceTimer;
   Timer? _lastPageAudioTimer;
+  VoidCallback? onStoryCompleted;
 
   // Animation & Timeline
   AnimationController? _playheadController;
@@ -114,7 +118,12 @@ class StoryPlayerController extends ChangeNotifier {
           notifyListeners();
         });
 
-  double get playheadMs => playhead.value * animationDurationMs;
+  double get playheadMs {
+    if (isPlayingAudio && audioPosition > Duration.zero) {
+      return audioPosition.inMilliseconds.toDouble();
+    }
+    return playhead.value * animationDurationMs;
+  }
 
   bool get _needsBackendPagesLoad =>
       story.id.isNotEmpty &&
@@ -151,6 +160,9 @@ class StoryPlayerController extends ChangeNotifier {
         isPlayingAudio = playing;
         notifyListeners();
       }
+    });
+    _audioCompleteSub = audioService.onPlayerComplete.listen((_) {
+      _handleAudioCompleted();
     });
 
     storyRoles = List<StoryRoleTemplate>.from(story.roles);
@@ -247,25 +259,64 @@ class StoryPlayerController extends ChangeNotifier {
     screenShakeOffset = 0.0;
   }
 
+  void _handleAudioCompleted() {
+    _autoAdvanceTimer?.cancel();
+    if (!isNarrationActive) return;
+
+    if (pages.isNotEmpty && currentPageIndex < pages.length - 1) {
+      // Do tre tu nhien sau khi doc xong audio (2.2s) giup be kip ngam tranh,
+      // va dong thoi dam bao tranh nen trang sau duoc tai truoc vao bo nho dem
+      _autoAdvanceTimer = Timer(const Duration(milliseconds: 2200), () {
+        if (!isNarrationActive) return;
+        if (pages.isNotEmpty && currentPageIndex < pages.length - 1) {
+          changePage(
+            currentPageIndex + 1,
+            pages,
+            autoPlayAudio: true,
+          );
+        }
+      });
+    } else if (pages.isNotEmpty && currentPageIndex >= pages.length - 1) {
+      // Da phat het audio trang cuoi cung cua truyen
+      isNarrationActive = false;
+      completeReadingSession();
+      onStoryCompleted?.call();
+    }
+  }
+
   void toggleAudio() {
     final currentPage = (pages.isNotEmpty && currentPageIndex < pages.length)
         ? pages[currentPageIndex]
         : null;
     final audioUrl = currentPage?.audioNarrationUrl;
-    audioService.toggleAudio(
-      audioUrl,
-      pageNumber: currentPageIndex + 1,
-      storyTitle: story.title,
-    );
 
-    if (!isPlayingAudio) {
+    if (isPlayingAudio || audioService.isPlaying) {
+      // Nguoi dung chu dong bam tam dung
+      isNarrationActive = false;
+      _autoAdvanceTimer?.cancel();
+      audioService.pauseAudio();
+    } else {
+      // Nguoi dung bat dau nghe ke truyen
+      isNarrationActive = true;
+      audioService.toggleAudio(
+        audioUrl,
+        pageNumber: currentPageIndex + 1,
+        storyTitle: story.title,
+      );
       replayPageMotion();
     }
+    notifyListeners();
   }
 
-  void changePage(int newIndex, List<StoryPage> allPages) {
+  void changePage(int newIndex, List<StoryPage> allPages, {bool? autoPlayAudio}) {
     if (newIndex < 0 || newIndex >= allPages.length) return;
-    final wasPlaying = isPlayingAudio;
+    _autoAdvanceTimer?.cancel();
+
+    // Neu autoPlayAudio duoc chi dinh, hoac isNarrationActive dang bat,
+    // hoac audio dang phat (chua nghe xong audio trang hien tai):
+    // Thi audio cua trang moi se tu dong duoc phat ngay lap tuc!
+    final shouldPlay = autoPlayAudio ?? (isNarrationActive || isPlayingAudio || audioService.isPlaying);
+
     final prevSlots = List<CharacterSlotTemplate>.from(activePageSlots);
     currentPageIndex = newIndex;
     syncActionForCurrentPage(
@@ -273,14 +324,22 @@ class StoryPlayerController extends ChangeNotifier {
       previousSlots: prevSlots,
     );
     spawnFireflies();
-    if (wasPlaying) {
+
+    if (shouldPlay) {
+      isNarrationActive = true;
       final newPage = allPages[newIndex];
       audioService.playAudio(
         newPage.audioNarrationUrl,
         pageNumber: newIndex + 1,
         storyTitle: story.title,
       );
+    } else {
+      // Neu o che do doc tham (khong phat am thanh), dung audio trang cu
+      audioService.stop();
     }
+
+    // Precache toàn diện tranh nền và nhân vật của trang tiếp theo
+    _precacheNextPageArt(newIndex, allPages);
 
     // Cap nhat tien do doc len Backend API (PUT /api/reading-logs/{id}/progress)
     _updateProgressOnPageChange(newIndex + 1);
@@ -293,9 +352,122 @@ class StoryPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _precacheNextPageArt(int currentIndex, List<StoryPage> allPages) {
+    if (currentIndex + 1 < allPages.length) {
+      final next = allPages[currentIndex + 1];
+      _precacheUrl(next.imageUrl);
+      final key = _pageSlotKey(next);
+      final nextSlots = slotsCacheByPage[key] ?? next.slots;
+      for (var i = 0; i < nextSlots.length; i++) {
+        final slot = nextSlots[i];
+        StoryRoleTemplate? matchedRole;
+        if (slot.storyRoleTemplateId != null && slot.storyRoleTemplateId!.isNotEmpty) {
+          for (final r in storyRoles) {
+            if (r.id.toLowerCase() == slot.storyRoleTemplateId!.toLowerCase()) {
+              matchedRole = r;
+              break;
+            }
+          }
+        }
+        matchedRole ??= (i < storyRoles.length)
+            ? storyRoles[i]
+            : (storyRoles.isNotEmpty ? storyRoles.first : null);
+
+        final assigned = resolveMappedKidCharacter(
+          roleId: slot.storyRoleTemplateId,
+          matchedRole: matchedRole,
+          slotIndex: i,
+        );
+        final characterUrl = assigned?.avatarAsset ?? matchedRole?.defaultAssetUrl ?? slot.assetUrl;
+        _precacheUrl(characterUrl);
+      }
+    }
+  }
+
+  void _precacheAllStoryAssets() {
+    final urls = <String>{};
+
+    for (final p in pages) {
+      if (p.imageUrl.isNotEmpty && p.imageUrl.startsWith('http') && !p.imageUrl.endsWith('/string')) {
+        urls.add(p.imageUrl);
+      }
+      for (final s in p.slots) {
+        if (s.assetUrl != null &&
+            s.assetUrl!.isNotEmpty &&
+            s.assetUrl!.startsWith('http') &&
+            !s.assetUrl!.endsWith('/string')) {
+          urls.add(s.assetUrl!);
+        }
+      }
+      final key = _pageSlotKey(p);
+      final cachedSlots = slotsCacheByPage[key];
+      if (cachedSlots != null) {
+        for (final s in cachedSlots) {
+          if (s.assetUrl != null &&
+              s.assetUrl!.isNotEmpty &&
+              s.assetUrl!.startsWith('http') &&
+              !s.assetUrl!.endsWith('/string')) {
+            urls.add(s.assetUrl!);
+          }
+        }
+      }
+    }
+
+    for (final r in storyRoles) {
+      if (r.defaultAssetUrl != null &&
+          r.defaultAssetUrl!.isNotEmpty &&
+          r.defaultAssetUrl!.startsWith('http') &&
+          !r.defaultAssetUrl!.endsWith('/string')) {
+        urls.add(r.defaultAssetUrl!);
+      }
+    }
+
+    for (final m in storyMappings) {
+      for (final c in appState.characters) {
+        if (c.id == m.characterId && c.avatarAsset.isNotEmpty && c.avatarAsset.startsWith('http')) {
+          urls.add(c.avatarAsset);
+        }
+      }
+    }
+
+    for (final c in appState.characters) {
+      if (c.avatarAsset.isNotEmpty && c.avatarAsset.startsWith('http')) {
+        urls.add(c.avatarAsset);
+      }
+    }
+
+    final hero = appState.heroCharacter;
+    if (hero != null && hero.avatarAsset.isNotEmpty && hero.avatarAsset.startsWith('http')) {
+      urls.add(hero.avatarAsset);
+    }
+
+    // Tải trước vào RAM bằng ImageCache của Flutter
+    for (final url in urls) {
+      _precacheUrl(url);
+    }
+  }
+
+  void _precacheUrl(String? url) {
+    if (url == null) return;
+    final clean = url.trim();
+    if (clean.isNotEmpty && clean.startsWith('http') && !clean.endsWith('/string')) {
+      try {
+        NetworkImage(clean).resolve(ImageConfiguration.empty);
+      } catch (_) {}
+    }
+  }
+
   /// Bat dau phien doc truyen tren Backend API (POST /api/reading-logs)
   Future<ReadingLogSession?> startReadingSession() async {
     if (activeReadingLogId != null && AppConfig.isValidUuid(activeReadingLogId)) {
+      return null;
+    }
+
+    // Neu la StoryTemplate goc, bo qua tao reading-logs vi backend chi nhan generatedStoryId
+    if (isOriginalTemplate) {
+      if (kDebugMode) {
+        debugPrint('[StoryPlayerController] Bo qua POST /api/reading-logs vi day la StoryTemplate goc: ${story.id}');
+      }
       return null;
     }
 
@@ -421,18 +593,25 @@ class StoryPlayerController extends ChangeNotifier {
       );
       if (roles.isNotEmpty) {
         storyRoles = roles;
-        // Cập nhật lại slots cho trang hiện tại nếu đang dùng auto-slot hoặc chưa có slots
+        // Cập nhật lại slots cho toàn bộ các trang nếu đang dùng fallback auto-slot bị thiếu vai
+        for (final p in pages) {
+          final pKey = _pageSlotKey(p);
+          final pSlots = slotsCacheByPage[pKey];
+          final needsUpdate = pSlots == null ||
+              pSlots.isEmpty ||
+              pSlots.any((s) =>
+                  s.id.startsWith('auto-') &&
+                  (s.storyRoleTemplateId == null || s.storyRoleTemplateId!.isEmpty));
+          if (needsUpdate) {
+            slotsCacheByPage[pKey] = _generateFallbackSlotsForPage(p);
+          }
+        }
         if (pages.isNotEmpty && currentPageIndex < pages.length) {
           final current = pages[currentPageIndex];
           final currentKey = _pageSlotKey(current);
           final currentSlots = slotsCacheByPage[currentKey];
-          final needsUpdate = currentSlots == null ||
-              currentSlots.isEmpty ||
-              currentSlots.any((s) => s.id.startsWith('auto-'));
-          if (needsUpdate) {
-            final newSlots = _generateFallbackSlotsForPage(current);
-            slotsCacheByPage[currentKey] = newSlots;
-            _applyPageSlots(current, newSlots, restartTimeline: true);
+          if (currentSlots != null && currentSlots.isNotEmpty) {
+            _applyPageSlots(current, currentSlots, restartTimeline: true);
           }
         }
         notifyListeners();
@@ -454,13 +633,15 @@ class StoryPlayerController extends ChangeNotifier {
   }
 
   Future<void> ensureStoryPagesLoaded() async {
-    final needLoad = _needsBackendPagesLoad;
-
-    isLoadingPages = needLoad;
-    if (needLoad) notifyListeners();
+    final hasExistingPages = pages.isNotEmpty;
+    // Chỉ hiển thị loading che màn hình nếu chưa có trang nào để đọc
+    if (!hasExistingPages) {
+      isLoadingPages = true;
+      notifyListeners();
+    }
 
     try {
-      if (needLoad) {
+      if (story.id.isNotEmpty && AppConfig.isValidUuid(story.id)) {
         final backendPages = await StoryService.fetchStoryTemplatePages(
           story.id,
           token: appState.authToken,
@@ -501,6 +682,7 @@ class StoryPlayerController extends ChangeNotifier {
               audioNarrationUrl: audioUrl,
               slots: dto.slots,
               animationClips: dto.animationClips,
+              subtitles: dto.composition?.subtitles ?? const [],
             );
           }).toList();
 
@@ -525,6 +707,9 @@ class StoryPlayerController extends ChangeNotifier {
             );
           }
           pages = mappedPages;
+          if (pages.isNotEmpty && currentPageIndex < pages.length) {
+            syncActionForCurrentPage(pages[currentPageIndex], fromInitState: false);
+          }
         }
       }
 
@@ -575,7 +760,10 @@ class StoryPlayerController extends ChangeNotifier {
         preloadAllStoryVocabularies(),
       ]);
 
-      if (needLoad) {
+      // Tải trước ngầm toàn bộ ảnh nhân vật và tranh nền vào RAM để chuyển trang tức thì
+      _precacheAllStoryAssets();
+
+      if (!hasExistingPages) {
         await Future.delayed(const Duration(milliseconds: 300));
       }
     } catch (e) {
@@ -589,11 +777,11 @@ class StoryPlayerController extends ChangeNotifier {
   }
 
   Future<void> preloadAllStorySlots() async {
-    for (final page in pages) {
+    final futures = pages.map((page) async {
       final pageId = page.id;
-      if (pageId == null || !AppConfig.isValidUuid(pageId)) continue;
+      if (pageId == null || !AppConfig.isValidUuid(pageId)) return;
       final key = _pageSlotKey(page);
-      if (slotsCacheByPage.containsKey(key)) continue;
+      if (slotsCacheByPage.containsKey(key)) return;
       try {
         final fetched = await StoryService.fetchPageSlots(
           pageId,
@@ -604,17 +792,30 @@ class StoryPlayerController extends ChangeNotifier {
         );
         if (fetched.isNotEmpty) {
           slotsCacheByPage[key] = fetched;
+        } else if (page.slots.isNotEmpty) {
+          slotsCacheByPage[key] = page.slots;
         } else {
-          // Backend DB chưa cấu hình slot, tự động sinh slot theo vai diễn của truyện
           slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
         }
       } catch (_) {
-        slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
+        if (page.slots.isNotEmpty) {
+          slotsCacheByPage[key] = page.slots;
+        } else {
+          slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
+        }
       }
-    }
+    });
+
+    await Future.wait(futures);
+
     // Cập nhật lại slots cho trang hiện tại sau khi nạp xong
     if (pages.isNotEmpty && currentPageIndex < pages.length) {
-      syncActionForCurrentPage(pages[currentPageIndex]);
+      final current = pages[currentPageIndex];
+      final currentKey = _pageSlotKey(current);
+      final loadedSlots = slotsCacheByPage[currentKey];
+      if (loadedSlots != null && loadedSlots.isNotEmpty) {
+        _applyPageSlots(current, loadedSlots, restartTimeline: false);
+      }
       notifyListeners();
     }
   }
@@ -708,18 +909,26 @@ class StoryPlayerController extends ChangeNotifier {
   }) async {
     final key = _pageSlotKey(page);
     final cached = slotsCacheByPage[key];
-    final initialSlots = cached ??
-        (page.slots.isNotEmpty
-            ? page.slots
-            : _generateFallbackSlotsForPage(page));
+    if (cached != null && cached.isNotEmpty) {
+      _applyPageSlots(page, cached, restartTimeline: true);
+      return;
+    }
 
-    _applyPageSlots(
-      page,
-      initialSlots,
-      restartTimeline: true,
-    );
+    if (page.slots.isNotEmpty) {
+      _applyPageSlots(page, page.slots, restartTimeline: true);
+    } else {
+      // Trong lúc đợi nạp slots chuẩn của trang này, không gán slot fallback sai vai để tránh chớp đổi nhân vật
+      _applyPageSlots(page, const [], restartTimeline: false);
+    }
 
-    if (page.id == null || !AppConfig.isValidUuid(page.id)) return;
+    if (page.id == null || !AppConfig.isValidUuid(page.id)) {
+      if (page.slots.isEmpty) {
+        final fallback = _generateFallbackSlotsForPage(page);
+        slotsCacheByPage[key] = fallback;
+        _applyPageSlots(page, fallback, restartTimeline: true);
+      }
+      return;
+    }
 
     try {
       final fetched = await StoryService.fetchPageSlots(
@@ -731,22 +940,23 @@ class StoryPlayerController extends ChangeNotifier {
       );
       if (fetched.isNotEmpty) {
         slotsCacheByPage[key] = fetched;
-        final currentPage = (pages.isNotEmpty && currentPageIndex < pages.length)
-            ? pages[currentPageIndex]
-            : null;
-        if (currentPage != null && _pageSlotKey(currentPage) == key) {
-          _applyPageSlots(
-            currentPage,
-            fetched,
-            restartTimeline: true,
-          );
-        }
       } else {
-        // Backend DB không có record slot, lưu fallback slots vào cache
-        slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
+        slotsCacheByPage[key] = page.slots.isNotEmpty
+            ? page.slots
+            : _generateFallbackSlotsForPage(page);
       }
     } catch (_) {
-      slotsCacheByPage[key] = _generateFallbackSlotsForPage(page);
+      slotsCacheByPage[key] = page.slots.isNotEmpty
+          ? page.slots
+          : _generateFallbackSlotsForPage(page);
+    }
+
+    final currentPage = (pages.isNotEmpty && currentPageIndex < pages.length)
+        ? pages[currentPageIndex]
+        : null;
+    if (currentPage != null && _pageSlotKey(currentPage) == key) {
+      final finalSlots = slotsCacheByPage[key] ?? const [];
+      _applyPageSlots(currentPage, finalSlots, restartTimeline: true);
     }
   }
 
@@ -777,19 +987,28 @@ class StoryPlayerController extends ChangeNotifier {
       loopHoldMs: explicitClips.isNotEmpty ? 1100.0 : 0.0,
     );
 
+    final subDuration = page.subtitles.isNotEmpty
+        ? (page.subtitles.last.startMs + page.subtitles.last.durationMs)
+        : 0.0;
+    final effectiveDuration = math.max(durationMs, subDuration);
+
     originalPageSlots = List<CharacterSlotTemplate>.from(slots);
     activePageSlots = List<CharacterSlotTemplate>.from(slots);
     activeAnimationClips = clips;
-    animationDurationMs = durationMs;
+    animationDurationMs = effectiveDuration;
     userDraggedSlotIds.clear();
 
-    if (slots.isNotEmpty) {
+    if (slots.isNotEmpty && clips.isNotEmpty) {
       if (restartTimeline || !playhead.isAnimating) {
         startTimelineLoop();
       } else {
         playhead.duration = Duration(
-          milliseconds: durationMs.round().clamp(600, 30000),
+          milliseconds: effectiveDuration.round().clamp(600, 30000),
         );
+      }
+    } else {
+      if (_playheadController != null && _playheadController!.isAnimating) {
+        _playheadController!.stop();
       }
     }
     notifyListeners();
@@ -912,6 +1131,13 @@ class StoryPlayerController extends ChangeNotifier {
           flipHorizontal: effectiveSlot.flipHorizontal,
         ),
       );
+
+      if (kDebugMode) {
+        debugPrint(
+          '[StoryPlayer] Trang $pageNum Slot $slotIndex (Vai: "${matchedRole?.roleName ?? "Chưa rõ"}" - RoleId: ${rawSlot.storyRoleTemplateId ?? "null"}) -> '
+          '${activeKidChar != null ? "Gán thành công nhân vật: \"${activeKidChar.name}\"" : "Dùng mẫu gốc Content Manager"}',
+        );
+      }
     }
 
     return items;
@@ -1233,6 +1459,8 @@ class StoryPlayerController extends ChangeNotifier {
         token: appState.authToken,
       );
     }
+    _autoAdvanceTimer?.cancel();
+    _audioCompleteSub?.cancel();
     _audioPosSub?.cancel();
     _audioDurSub?.cancel();
     _audioStateSub?.cancel();

@@ -96,20 +96,20 @@ class _LoginScreenState extends State<LoginScreen> {
     final isMobile = Responsive.isMobile(context);
     final outerPadding = Responsive.value<EdgeInsets>(
       context,
-      mobile: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      tablet: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      desktop: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+      mobile: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      tablet: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      desktop: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
     );
     final formMaxWidth = Responsive.value<double>(
       context,
-      mobile: 390.0,
-      tablet: 450.0,
-      desktop: 470.0,
+      mobile: 360.0,
+      tablet: 550.0,
+      desktop: 560.0,
     );
     final verticalSpacing = Responsive.value<double>(
       context,
-      mobile: 16.0,
-      tablet: 22.0,
+      mobile: 18.0,
+      tablet: 34.0,
     );
     final bgImagePath = isMobile
         ? 'assets/images/login-bg-mobile.png'
@@ -149,7 +149,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         minHeight: (viewportConstraints.maxHeight - (isMobile ? 28 : 48))
                             .clamp(0.0, double.infinity),
                       ),
-                      child: Center(
+                      child: Align(
+                        alignment: isMobile
+                            ? const Alignment(0.0, 0.06)
+                            : const Alignment(0.0, 0.22),
                         child: ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: formMaxWidth),
                           child: Column(

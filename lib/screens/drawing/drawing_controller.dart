@@ -255,6 +255,7 @@ class DrawingController extends ChangeNotifier {
     required AppState appState,
     VoidCallback? onOpenCollection,
     required void Function(String msg) onToast,
+    Uint8List? overrideBytes,
   }) async {
     // 1. Kiểm tra giới hạn tạo nhân vật trong ngày
     if (!appState.canCreateCharacter) {
@@ -272,16 +273,22 @@ class DrawingController extends ChangeNotifier {
       return;
     }
 
-    // 3. Kiểm tra nét vẽ trên canvas
-    if (appState.strokeLines.isEmpty && currentFillImage == null) {
-      onToast('Bé ơi, hãy vẽ bức tranh trước khi biến hình nhé.');
-      return;
+    final Uint8List? canvasBytes;
+    if (overrideBytes != null && overrideBytes.isNotEmpty) {
+      canvasBytes = overrideBytes;
+    } else {
+      // 3. Kiểm tra nét vẽ trên canvas
+      if (appState.strokeLines.isEmpty && currentFillImage == null) {
+        onToast('Bé ơi, hãy vẽ bức tranh trước khi biến hình nhé.');
+        return;
+      }
+
+      // Chụp ảnh canvas
+      canvasBytes = await captureCanvasBytes(appState);
     }
 
-    // Chụp ảnh canvas
-    final canvasBytes = await captureCanvasBytes(appState);
     if (canvasBytes == null || canvasBytes.isEmpty) {
-      onToast('Không thể chụp nét vẽ của bé, vui lòng thử lại.');
+      onToast('Không thể xử lý bức tranh của bé, vui lòng thử lại.');
       return;
     }
 

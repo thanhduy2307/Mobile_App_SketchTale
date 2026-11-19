@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../utils/app_config.dart';
 import 'vocabulary_template.dart';
@@ -293,6 +294,176 @@ class CharacterSlotTemplate {
   }
 }
 
+/// Item phụ đề trong Timeline của trang truyện (từ compositionJson.subtitles)
+class StoryPageSubtitleItem {
+  final String id;
+  final String text;
+  final double startMs;
+  final double durationMs;
+
+  const StoryPageSubtitleItem({
+    required this.id,
+    required this.text,
+    required this.startMs,
+    required this.durationMs,
+  });
+
+  factory StoryPageSubtitleItem.fromJson(Map<String, dynamic> json) {
+    final start = (json['startMs'] is num)
+        ? (json['startMs'] as num).toDouble()
+        : double.tryParse(json['startMs']?.toString() ?? '') ?? 0.0;
+    final duration = (json['durationMs'] is num)
+        ? (json['durationMs'] as num).toDouble()
+        : double.tryParse(json['durationMs']?.toString() ?? '') ?? 4000.0;
+    return StoryPageSubtitleItem(
+      id: json['id']?.toString() ?? '',
+      text: (json['text'] ?? json['content'] ?? '').toString().trim(),
+      startMs: start,
+      durationMs: duration,
+    );
+  }
+}
+
+/// Parse và quản lý Timeline compositionJson của từng trang truyện:
+/// - Trích xuất phụ đề subtitles theo thời gian thực (startMs, durationMs, text)
+/// - Ghép fullSubtitleText thay thế triệt để rawText cũ của server
+/// - Trích xuất audio và animation clips từ timeline
+class StoryPageComposition {
+  final String? rawJson;
+  final List<StoryPageSubtitleItem> subtitles;
+  final String fullSubtitleText;
+  final String? audioUrl;
+  final double? timelineDurationMs;
+  final List<StoryAnimationClip> animationClips;
+
+  const StoryPageComposition({
+    this.rawJson,
+    this.subtitles = const [],
+    this.fullSubtitleText = '',
+    this.audioUrl,
+    this.timelineDurationMs,
+    this.animationClips = const [],
+  });
+
+  factory StoryPageComposition.parse(dynamic rawInput, {String fallbackText = ''}) {
+    if (rawInput == null) {
+      return StoryPageComposition(
+        fullSubtitleText: _cleanText(fallbackText),
+      );
+    }
+
+    dynamic map;
+    String? rawJsonStr;
+    if (rawInput is String) {
+      rawJsonStr = rawInput;
+      final trimmed = rawInput.trim();
+      if (trimmed.isNotEmpty && trimmed != 'string' && trimmed != 'null') {
+        try {
+          map = jsonDecode(trimmed);
+        } catch (_) {}
+      }
+    } else if (rawInput is Map) {
+      map = rawInput;
+    }
+
+    if (map is! Map) {
+      return StoryPageComposition(
+        rawJson: rawJsonStr,
+        fullSubtitleText: _cleanText(fallbackText),
+      );
+    }
+
+    // 1. Parse Subtitles từ timeline của Content Manager
+    final parsedSubtitles = <StoryPageSubtitleItem>[];
+    final rawSubtitles = map['subtitles'] ?? map['Subtitles'];
+    if (rawSubtitles is List) {
+      for (final item in rawSubtitles) {
+        if (item is Map) {
+          final sub = StoryPageSubtitleItem.fromJson(Map<String, dynamic>.from(item));
+          if (sub.text.isNotEmpty &&
+              sub.text.toLowerCase() != 'string' &&
+              sub.text.toLowerCase() != 'null') {
+            parsedSubtitles.add(sub);
+          }
+        }
+      }
+      parsedSubtitles.sort((a, b) => a.startMs.compareTo(b.startMs));
+    }
+
+    // Ghép các câu phụ đề theo thứ tự timeline thành một đoạn văn bản hoàn chỉnh
+    String extractedText = '';
+    if (parsedSubtitles.isNotEmpty) {
+      extractedText = parsedSubtitles.map((s) => s.text).join(' ').trim();
+    } else {
+      final singleSub = map['subtitleText'] ??
+          map['SubtitleText'] ??
+          map['subtitle'] ??
+          map['Subtitle'] ??
+          map['text'] ??
+          map['Text'];
+      extractedText = _cleanText(singleSub?.toString() ?? '');
+    }
+
+    final finalSubtitleText = extractedText.isNotEmpty
+        ? extractedText
+        : _cleanText(fallbackText);
+
+    // 2. Parse Audio từ assets trong timeline nếu audio bên ngoài root bị null
+    String? audioUrl;
+    final rawAssets = map['assets'] ?? map['Assets'];
+    if (rawAssets is List) {
+      for (final asset in rawAssets) {
+        if (asset is Map) {
+          final kind = asset['kind']?.toString().toLowerCase();
+          final mime = asset['mimeType']?.toString().toLowerCase();
+          final url = asset['url']?.toString().trim();
+          if ((kind == 'audio' || (mime != null && mime.contains('audio'))) &&
+              url != null &&
+              url.isNotEmpty &&
+              url != 'string') {
+            audioUrl = url;
+            break;
+          }
+        }
+      }
+    }
+
+    // 3. Timeline duration
+    double? timelineDuration;
+    final rawTracks = map['audioTracks'] ?? map['AudioTracks'];
+    if (rawTracks is List && rawTracks.isNotEmpty) {
+      final firstTrack = rawTracks.first;
+      if (firstTrack is Map && firstTrack['durationMs'] is num) {
+        timelineDuration = (firstTrack['durationMs'] as num).toDouble();
+      }
+    }
+    if (timelineDuration == null && parsedSubtitles.isNotEmpty) {
+      final lastSub = parsedSubtitles.last;
+      timelineDuration = lastSub.startMs + lastSub.durationMs;
+    }
+
+    // 4. Animation clips từ timeline
+    final clips = StoryAnimationClip.parsePageClips(Map<String, dynamic>.from(map));
+
+    return StoryPageComposition(
+      rawJson: rawJsonStr,
+      subtitles: parsedSubtitles,
+      fullSubtitleText: finalSubtitleText,
+      audioUrl: audioUrl,
+      timelineDurationMs: timelineDuration,
+      animationClips: clips,
+    );
+  }
+
+  static String _cleanText(String input) {
+    final t = input.trim();
+    if (t.isEmpty || t.toLowerCase() == 'string' || t.toLowerCase() == 'null') {
+      return '';
+    }
+    return t;
+  }
+}
+
 /// A single story page
 class StoryPage {
   final String? id; // Backend page UUID
@@ -309,6 +480,7 @@ class StoryPage {
   final List<CharacterSlotTemplate> slots;
   final List<StoryAnimationClip> animationClips;
   final List<VocabularyTemplate> vocabularies;
+  final List<StoryPageSubtitleItem> subtitles;
 
   const StoryPage({
     this.id,
@@ -325,7 +497,22 @@ class StoryPage {
     this.slots = const [],
     this.animationClips = const [],
     this.vocabularies = const [],
+    this.subtitles = const [],
   });
+
+  /// Lấy câu phụ đề tương ứng với thời điểm phát hiện tại (playheadMs)
+  String subtitleAtPlayhead(double playheadMs) {
+    if (subtitles.isEmpty) return textContent;
+    for (final s in subtitles) {
+      if (playheadMs >= s.startMs && playheadMs < (s.startMs + s.durationMs)) {
+        return s.text;
+      }
+    }
+    if (playheadMs >= subtitles.last.startMs) {
+      return subtitles.last.text;
+    }
+    return subtitles.first.text;
+  }
 
   StoryPage copyWith({
     String? id,
@@ -342,6 +529,7 @@ class StoryPage {
     List<CharacterSlotTemplate>? slots,
     List<StoryAnimationClip>? animationClips,
     List<VocabularyTemplate>? vocabularies,
+    List<StoryPageSubtitleItem>? subtitles,
   }) {
     return StoryPage(
       id: id ?? this.id,
@@ -358,6 +546,7 @@ class StoryPage {
       slots: slots ?? this.slots,
       animationClips: animationClips ?? this.animationClips,
       vocabularies: vocabularies ?? this.vocabularies,
+      subtitles: subtitles ?? this.subtitles,
     );
   }
 }
@@ -535,6 +724,7 @@ class StoryTemplatePage {
   final String? audioNarrationUrl;
   final List<CharacterSlotTemplate> slots;
   final List<StoryAnimationClip> animationClips;
+  final StoryPageComposition? composition;
 
   const StoryTemplatePage({
     required this.id,
@@ -545,6 +735,7 @@ class StoryTemplatePage {
     this.audioNarrationUrl,
     this.slots = const [],
     this.animationClips = const [],
+    this.composition,
   });
 
   factory StoryTemplatePage.fromJson(Map<String, dynamic> json) {
@@ -604,6 +795,30 @@ class StoryTemplatePage {
         ? null
         : audioStr;
 
+    // Parse Timeline tu compositionJson do Content Manager thiet lap
+    final comp = StoryPageComposition.parse(
+      json['compositionJson'] ?? json['CompositionJson'],
+      fallbackText: cleanText,
+    );
+
+    // UU TIEN SO 1: Lay phu de subtitles/subtitleText tu compositionJson thay the rawText
+    final effectiveText = comp.fullSubtitleText.isNotEmpty
+        ? comp.fullSubtitleText
+        : cleanText;
+
+    // Parse audio neu root null
+    final finalAudio = cleanAudio ?? comp.audioUrl;
+
+    // Hop nhat animation clips tu timeline va root DTO
+    final rootClips = StoryAnimationClip.parsePageClips(json);
+    final combinedClips = <StoryAnimationClip>[];
+    final seenClipIds = <String>{};
+    for (final c in [...comp.animationClips, ...rootClips]) {
+      if (seenClipIds.add(c.id)) {
+        combinedClips.add(c);
+      }
+    }
+
     return StoryTemplatePage(
       id: idVal.toString(),
       storyTemplateId: storyIdVal.toString(),
@@ -611,10 +826,11 @@ class StoryTemplatePage {
           ? pageNumVal.toInt()
           : int.tryParse(pageNumVal.toString()) ?? 1,
       imageUrl: cleanBg,
-      rawText: cleanText,
-      audioNarrationUrl: cleanAudio,
+      rawText: effectiveText,
+      audioNarrationUrl: finalAudio,
       slots: parsedSlots,
-      animationClips: StoryAnimationClip.parsePageClips(json),
+      animationClips: combinedClips,
+      composition: comp,
     );
   }
 
@@ -766,6 +982,7 @@ class StoryTemplate {
           audioNarrationUrl: audioUrl,
           slots: p.slots,
           animationClips: p.animationClips,
+          subtitles: p.composition?.subtitles ?? const [],
         );
       }).toList();
       basePages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));

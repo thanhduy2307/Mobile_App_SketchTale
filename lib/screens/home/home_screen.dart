@@ -49,20 +49,20 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // 2. Khong Gian Sang Tao (Vat the chinh - to lon, noi bat)
-              HomeCreationGates(
-                isTablet: isTablet,
-                onOpenDrawing: onOpenDrawing,
+              // 2. Goi Y Truyen Hom Nay
+              HomeTodayStories(
+                story1: featured.story1,
+                story2: featured.story2,
+                onStorySelected: (story) => HomeController.openStory(context, state, story),
                 onOpenLibrary: onOpenLibrary,
               ),
 
               const SizedBox(height: 20),
 
-              // 3. Goi Y Truyen Hom Nay (Phu - toi da 2 truyen)
-              HomeTodayStories(
-                story1: featured.story1,
-                story2: featured.story2,
-                onStorySelected: (story) => HomeController.openStory(context, state, story),
+              // 3. Khong Gian Sang Tao
+              HomeCreationGates(
+                isTablet: isTablet,
+                onOpenDrawing: onOpenDrawing,
                 onOpenLibrary: onOpenLibrary,
               ),
 

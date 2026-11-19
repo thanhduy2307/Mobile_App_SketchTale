@@ -219,12 +219,22 @@ class StoryAnimationClip {
         json['AnimationClips'] ??
         json['animation_clips'] ??
         json['animationJson'] ??
-        json['AnimationJson'];
+        json['AnimationJson'] ??
+        json['compositionJson'] ??
+        json['CompositionJson'];
 
     if (rawClips is String && rawClips.trim().isNotEmpty) {
       try {
         rawClips = jsonDecode(rawClips);
       } catch (_) {}
+    }
+
+    if (rawClips is Map) {
+      rawClips = rawClips['animationClips'] ??
+          rawClips['AnimationClips'] ??
+          rawClips['clips'] ??
+          rawClips['sequence'] ??
+          rawClips['Sequence'];
     }
 
     if (rawClips is List && rawClips.isNotEmpty) {
@@ -545,11 +555,11 @@ class StoryAnimationEngine {
     return List<CharacterSlotTemplate>.from(rawSlots);
   }
 
-  /// Xay dung clips chuyen dong chuan 100% theo Content Manager (CM):
-  /// - Neu page/slot da co animationClips hoac sequence tu backend: giu nguyen tuyet doi
-  /// - Neu la story "Sharing Picnic" (nhu trong video nguoi dung quay): ap dung dung duong ve path do CM ve tren canvas
-  /// - Neu chua co clip: ap dung chuyen dong nhe nhang chuan CM (preset walk / jump / appear)
-  ///   ngay tai toa do (posX, posY) do CM quy dinh, TUYET DOI KHONG tru lech sang mep trai (x = 0).
+  /// Xây dựng clips chuyển động chuẩn 100% theo Content Manager (CM):
+  /// - Nếu page/slot đã có animationClips hoặc sequence từ backend: giữ nguyên tuyệt đối
+  /// - Nếu là story "Sharing Picnic" (như video Content Manager vẽ path quanh bàn ăn): áp dụng đúng đường path vẽ
+  /// - Tuyệt đối KHÔNG tự ý gán hiệu ứng nhún nhảy (walk / jump) khi Content Manager không thiết lập,
+  ///   để nhân vật đứng yên vững vàng, chuẩn xác tại tọa độ (posX, posY) do CM kéo thả.
   static List<StoryAnimationClip> buildContextualClipsForSlots({
     required List<CharacterSlotTemplate> slots,
     List<CharacterSlotTemplate> previousSlots = const [],
@@ -570,7 +580,7 @@ class StoryAnimationEngine {
           storyTitle.toLowerCase().contains('picnic');
 
       if (isSharingPicnic) {
-        // Tuan thu chinh xac 100% duong ve Path ma Content Manager Studio ve tren Canvas (video nguoi dung)
+        // Tuân thủ chính xác 100% đường vẽ Path mà Content Manager Studio vẽ trên Canvas (video người dùng)
         const picnicDuration = 12000.0;
         final pathClip = StoryAnimationClip(
           id: 'cm-sharing-picnic-path-${slot.id}',
@@ -598,39 +608,8 @@ class StoryAnimationEngine {
             StoryAnimationPoint(x: 61.5, y: 44.0),
           ],
         );
-        final walkClip = StoryAnimationClip(
-          id: 'cm-sharing-picnic-walk-${slot.id}',
-          targetId: slot.id,
-          kind: 'preset',
-          preset: 'walk',
-          startMs: 0.0,
-          durationMs: picnicDuration,
-        );
         clips.add(pathClip);
-        clips.add(walkClip);
-        continue;
       }
-
-      // Voi cac truyen khac: Chuyen dong nhe nhang chuan CM ngay tai dung toa do slot.posX, slot.posY
-      // Preset "walk" chuan CM: nhun nhe buoc di y -= abs(sin(t * pi * 4)) * 2
-      final act = (characterAction ?? '').toLowerCase();
-      String presetName = 'walk';
-      if (act.contains('jump')) {
-        presetName = 'jump';
-      } else if (act.contains('spin')) {
-        presetName = 'spin';
-      }
-
-      final motionClip = StoryAnimationClip(
-        id: 'cm-motion-$presetName-${slot.id}',
-        targetId: slot.id,
-        kind: 'preset',
-        preset: presetName,
-        startMs: 0.0,
-        durationMs: 3000.0,
-        distance: 8.0,
-      );
-      clips.add(motionClip);
     }
 
     return clips;

@@ -24,17 +24,8 @@ class LoginStyles {
     ],
   );
 
-  static BoxDecoration authCardDecoration = BoxDecoration(
-    color: AppColors.surfaceContainerLowest,
-    borderRadius: BorderRadius.circular(26),
-    border: Border.all(color: const Color(0xFFEEE4D1), width: 1.2),
-    boxShadow: const [
-      BoxShadow(
-        color: Color(0x22A77A31),
-        offset: Offset(0, 8),
-        blurRadius: 24,
-      ),
-    ],
+  static BoxDecoration authCardDecoration = const BoxDecoration(
+    color: Colors.transparent,
   );
 
   static BoxDecoration securityBadgeDecoration = BoxDecoration(
